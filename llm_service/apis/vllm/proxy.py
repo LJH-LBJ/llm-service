@@ -544,7 +544,7 @@ class Proxy(EngineClient):
                     if self.proxy_to_encode_time[0] > 0
                     else 0.0
                 )
-                response.metrics.update(
+                response.metrics[id].update(
                     {
                         "proxy_to_pd_time_avg": proxy2pd_avg,
                         "proxy_to_encode_time_avg": proxy2encode_avg,

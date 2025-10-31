@@ -55,7 +55,6 @@ class MetricsReporter:
                 for _, value in result.items():
                     msg = log_msg % (
                         iid,
-                        value.get("instance_id", 0),
                         value.get("engine_index", 0),
                         value.get("e2e_time_requests", 0.0),
                         value.get("queue_time_requests", 0.0),
