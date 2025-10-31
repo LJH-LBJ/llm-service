@@ -37,6 +37,7 @@ class MetricsReporter:
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         log_msg = (
+            "instances: %03d, "
             "Engine %03d: "
             "Avg e2e time requests: %.3f ms, "
             "Avg queue time requests: %.3f ms, "
@@ -48,19 +49,23 @@ class MetricsReporter:
             log_msg += "Avg proxy to encoder requests: %.3f ms, "
         else:
             log_msg += "Avg proxy to pd requests: %.3f ms, "
+        msg = ''
         for iid, result in zip(self._instances.keys(), results):
             if isinstance(result, dict):
-                msg = log_msg % (
-                    result.get("engine_index", 0),
-                    result.get("e2e_time_requests", 0.0),
-                    result.get("queue_time_requests", 0.0),
-                    result.get("prefill_time_requests", 0.0),
-                    result.get("mean_time_per_output_token_requests", 0.0),
-                    result.get("time_to_first_token", 0.0),
-                    result.get("proxy_to_encode_time_avg", 0.0)
-                    if self.server_type == ServerType.E_INSTANCE
-                    else result.get("proxy_to_pd_time_avg", 0.0),
-                )
+                for _, value in result.items():
+                    msg = log_msg % (
+                        iid,
+                        value.get("instance_id", 0),
+                        value.get("engine_index", 0),
+                        value.get("e2e_time_requests", 0.0),
+                        value.get("queue_time_requests", 0.0),
+                        value.get("prefill_time_requests", 0.0),
+                        value.get("mean_time_per_output_token_requests", 0.0),
+                        value.get("time_to_first_token", 0.0),
+                        value.get("proxy_to_encode_time_avg", 0.0)
+                        if self.server_type == ServerType.E_INSTANCE
+                        else value.get("proxy_to_pd_time_avg", 0.0),
+                    )
 
                 metrics[iid] = msg
             else:

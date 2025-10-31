@@ -133,7 +133,7 @@ class DisaggWorker:
 
     async def _metrics_handler(self, req: MetricsRequest):
         stats_logger: Optional[
-            dict[str, Union[int, float]]
+            dict[int, dict[str, Union[int, float]]]
         ] = await self.engine.get_epd_stats()
         msg = (
             ResponseType.METRICS,

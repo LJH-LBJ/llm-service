@@ -94,4 +94,4 @@ class MetricsRequest(msgspec.Struct):
 
 class MetricsResponse(msgspec.Struct):
     request_id: str
-    metrics: Optional[dict[str, Union[int, float]]]
+    metrics: Optional[dict[int, dict[str, Union[int, float]]]]
