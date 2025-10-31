@@ -49,7 +49,7 @@ class MetricsReporter:
             log_msg += "Avg proxy to encoder requests: %.3f ms, "
         else:
             log_msg += "Avg proxy to pd requests: %.3f ms, "
-        msg = ''
+        msg = ""
         for iid, result in zip(self._instances.keys(), results):
             if isinstance(result, dict):
                 for _, value in result.items():
