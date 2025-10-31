@@ -560,8 +560,9 @@ class Proxy(EngineClient):
         except Exception as e:
             raise RuntimeError(
                 "Get metrics failed for %s %s, \
-                    exception: %s" % (server_type, id, e)
-        ) from e
+                    exception: %s"
+                % (server_type, id, e)
+            ) from e
         finally:
             self.queues.pop(request_id, None)
 
