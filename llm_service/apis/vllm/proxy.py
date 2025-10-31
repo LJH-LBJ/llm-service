@@ -544,12 +544,13 @@ class Proxy(EngineClient):
                     if self.proxy_to_encode_time[0] > 0
                     else 0.0
                 )
-                response.metrics[id].update(
-                    {
-                        "proxy_to_pd_time_avg": proxy2pd_avg,
-                        "proxy_to_encode_time_avg": proxy2encode_avg,
-                    }
-                )
+                for engine_id in response.metrics:
+                    response.metrics[engine_id].update(
+                        {
+                            "proxy_to_pd_time_avg": proxy2pd_avg,
+                            "proxy_to_encode_time_avg": proxy2encode_avg,
+                        }
+                    )
                 return response.metrics
             elif isinstance(response, Exception):
                 raise response
@@ -558,11 +559,9 @@ class Proxy(EngineClient):
 
         except Exception as e:
             raise RuntimeError(
-                "Get metrics failed for %s %s, exception: %s",
-                server_type,
-                id,
-                e,
-            ) from e
+                "Get metrics failed for %s %s, \
+                    exception: %s" % (server_type, id, e)
+        ) from e
         finally:
             self.queues.pop(request_id, None)
 
