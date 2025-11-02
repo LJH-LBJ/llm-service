@@ -18,10 +18,12 @@ class MetricsReporter:
         self,
         server_type: ServerType,
         instances: list[int],
+        addr: list[str],
         get_metrics_func,
     ):
         self.server_type = server_type
         self._instances = {iid: True for iid in instances}
+        self.addr = addr
         self._get_metrics_func = get_metrics_func
 
     async def get_metrics(self) -> None:
@@ -37,7 +39,8 @@ class MetricsReporter:
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
         log_msg = (
-            "instances: %03d, "
+            "ec_role: %s, "
+            "addr: %s, "
             "Engine %03d: "
             "Avg e2e time requests: %.3f ms, "
             "Avg queue time requests: %.3f ms, "
@@ -50,11 +53,12 @@ class MetricsReporter:
         else:
             log_msg += "Avg proxy to pd requests: %.3f ms, "
         msg = ""
-        for iid, result in zip(self._instances.keys(), results):
+        for iid, work_addr, result in zip(self._instances.keys(), self.addr, results):
             if isinstance(result, dict):
                 for _, value in result.items():
                     msg = log_msg % (
-                        iid,
+                        self.server_type.name,
+                        work_addr,
                         value.get("engine_index", 0),
                         value.get("e2e_time_requests", 0.0),
                         value.get("queue_time_requests", 0.0),
@@ -71,7 +75,7 @@ class MetricsReporter:
                 logger.warning(
                     "Get metrics for %s %s failed, reason is (%s).",
                     self.server_type,
-                    iid,
+                    work_addr,
                     "timeout"
                     if isinstance(result, asyncio.TimeoutError)
                     else result,

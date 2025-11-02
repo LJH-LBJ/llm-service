@@ -72,7 +72,7 @@ class DisaggWorker:
         poller = zmq.asyncio.Poller()
         poller.register(self.from_proxy, zmq.POLLIN)
         if TIMECOUNT_ENABLED:
-            # log engine stats(logger stats and EPD stats (if enabled))
+            # log engine stats (logger stats and EPD stats (if enabled))
             async def _force_log():
                 while True:
                     await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
@@ -134,7 +134,7 @@ class DisaggWorker:
     async def _metrics_handler(self, req: MetricsRequest):
         stats_logger: Optional[
             dict[int, dict[str, Union[int, float]]]
-        ] = await self.engine.get_epd_stats()
+        ] = await self.engine.get_disagg_worker_stats()
         msg = (
             ResponseType.METRICS,
             self.encoder.encode(
@@ -149,10 +149,9 @@ class DisaggWorker:
         make_msg_func,
     ):
         request_id = req.request_id
-        _recv_time = {
-            "recv": time.perf_counter(),
-            "first_token_flag": True,
-        }  # time of worker receive request from proxy
+        # time of the first token worker receive request from proxy
+        recv_timestamp = time.perf_counter()
+        first_token_flag = True
         try:
             prompt_payload: dict[str, Any] = {"prompt": req.prompt}
             if req.multi_modal_data is not None:
@@ -170,9 +169,9 @@ class DisaggWorker:
                 response = GenerationResponse.from_request_output(
                     request_output
                 )
-                if TIMECOUNT_ENABLED and _recv_time["first_token_flag"]:
-                    response.proxy_to_worker_time_end = _recv_time["recv"]
-                    _recv_time["first_token_flag"] = False
+                if TIMECOUNT_ENABLED and first_token_flag:
+                    response.proxy_to_worker_time_end = recv_timestamp
+                    first_token_flag = False
                 response_bytes = self.encoder.encode(response)
                 msg = make_msg_func(response_bytes)
                 await self.to_proxy.send_multipart(msg, copy=False)

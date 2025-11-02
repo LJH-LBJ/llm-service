@@ -84,8 +84,7 @@ async def main():
         if TIMECOUNT_ENABLED:
             # wait for logging
             await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
-            await p.pd_metrics_logger.get_metrics()
-            await p.encoder_metrics_logger.get_metrics()
+            await p.log_metrics()
     finally:
         p.shutdown()
 

@@ -49,7 +49,7 @@ class GenerationResponse(msgspec.Struct):
     stop_reason: Optional[str] = None
     # TODO: support full protocol.
     logprobs = None
-    proxy_to_worker_time_end: Optional[float] = 0.0
+    proxy_to_worker_time_end: Optional[float] = None
 
     @classmethod
     def from_request_output(

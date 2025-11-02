@@ -105,11 +105,13 @@ class Proxy(EngineClient):
         self.pd_metrics_logger = MetricsReporter(
             server_type=ServerType.PD_INSTANCE,
             instances=list(range(len(self.pd_addr_list))),
+            addr=self.pd_addr_list,
             get_metrics_func=self.get_metrics,
         )
         self.encoder_metrics_logger = MetricsReporter(
             server_type=ServerType.E_INSTANCE,
             instances=list(range(len(self.encode_addr_list))),
+            addr=self.encode_addr_list,
             get_metrics_func=self.get_metrics,
         )
         self.encode_request_stats_monitor = RequestStatsMonitor(
@@ -133,9 +135,10 @@ class Proxy(EngineClient):
             task="generate",
             seed=42,
         )
-
-        self.proxy_to_pd_time: list[float] = [0.0, 0.0]  # count, total time
-        self.proxy_to_encode_time: list[float] = [0.0, 0.0]  # count, total time
+        self.proxy_to_pd_time_count: float = 0
+        self.proxy_to_pd_time_total: float = 0
+        self.proxy_to_encode_time_count: float = 0
+        self.proxy_to_encode_time_total: float = 0
 
     def shutdown(self):
         self.ctx.destroy()
@@ -145,6 +148,10 @@ class Proxy(EngineClient):
         socket_path = self.proxy_addr.replace("ipc://", "")
         if os.path.exists(socket_path):
             os.remove(socket_path)
+
+    async def log_metrics(self) -> None:
+        await self.pd_metrics_logger.get_metrics()
+        await self.encoder_metrics_logger.get_metrics()
 
     async def _run_encode(
         self,
@@ -183,8 +190,8 @@ class Proxy(EngineClient):
                 and isinstance(response, GenerationResponse)
                 and response.proxy_to_worker_time_end
             ):
-                self.proxy_to_encode_time[0] += 1
-                self.proxy_to_encode_time[1] += (
+                self.proxy_to_encode_time_count += 1
+                self.proxy_to_encode_time_total += (
                     response.proxy_to_worker_time_end
                     - proxy_to_encode_time_start  # type: ignore
                 )
@@ -238,8 +245,8 @@ class Proxy(EngineClient):
                     and isinstance(response, GenerationResponse)
                     and response.proxy_to_worker_time_end
                 ):
-                    self.proxy_to_pd_time[0] += 1
-                    self.proxy_to_pd_time[1] += (
+                    self.proxy_to_pd_time_count += 1
+                    self.proxy_to_pd_time_total += (
                         response.proxy_to_worker_time_end
                         - proxy_to_pd_time_start  # type: ignore
                     )
@@ -535,13 +542,13 @@ class Proxy(EngineClient):
                 # calculate proxy to pd/encode time average
                 # add to metrics
                 proxy2pd_avg = (
-                    self.proxy_to_pd_time[1] / self.proxy_to_pd_time[0]
-                    if self.proxy_to_pd_time[0] > 0
+                    self.proxy_to_pd_time_total / self.proxy_to_pd_time_count
+                    if self.proxy_to_pd_time_count > 0
                     else 0.0
                 )
                 proxy2encode_avg = (
-                    self.proxy_to_encode_time[1] / self.proxy_to_encode_time[0]
-                    if self.proxy_to_encode_time[0] > 0
+                    self.proxy_to_encode_time_total / self.proxy_to_encode_time_count
+                    if self.proxy_to_encode_time_count > 0
                     else 0.0
                 )
                 for engine_id in response.metrics:
@@ -559,8 +566,7 @@ class Proxy(EngineClient):
 
         except Exception as e:
             raise RuntimeError(
-                "Get metrics failed for %s %s, \
-                    exception: %s"
+                "Get metrics failed for %s %s, exception: %s"
                 % (server_type, id, e)
             ) from e
         finally:
