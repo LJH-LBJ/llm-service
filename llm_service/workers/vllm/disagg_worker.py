@@ -149,7 +149,8 @@ class DisaggWorker:
     ):
         request_id = req.request_id
         # time of the first token worker receive request from proxy
-        recv_timestamp = time.perf_counter()
+        if llm_service_envs.TIMECOUNT_ENABLED:
+            recv_timestamp = time.perf_counter()
         first_token_flag = True
         try:
             prompt_payload: dict[str, Any] = {"prompt": req.prompt}
@@ -169,7 +170,7 @@ class DisaggWorker:
                     request_output
                 )
                 if llm_service_envs.TIMECOUNT_ENABLED and first_token_flag:
-                    response.proxy_to_worker_time_end = recv_timestamp
+                    response.proxy_to_worker_time_end = recv_timestamp # type: ignore
                     first_token_flag = False
                 response_bytes = self.encoder.encode(response)
                 msg = make_msg_func(response_bytes)

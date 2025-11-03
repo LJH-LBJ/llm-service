@@ -190,11 +190,18 @@ class Proxy(EngineClient):
                 and isinstance(response, GenerationResponse)
                 and response.proxy_to_worker_time_end
             ):
-                self.proxy_to_encode_time_count[idx] += 1
-                self.proxy_to_encode_time_total[idx] += (
-                    response.proxy_to_worker_time_end
-                    - proxy_to_encode_time_start  # type: ignore
-                )
+                if self.proxy_to_encode_time_count.get(idx) is None:
+                    self.proxy_to_encode_time_count[idx] = 1
+                    self.proxy_to_encode_time_total[idx] = (
+                        response.proxy_to_worker_time_end
+                        - proxy_to_encode_time_start  # type: ignore
+                    )
+                else:
+                    self.proxy_to_encode_time_count[idx] += 1
+                    self.proxy_to_encode_time_total[idx] += (
+                        response.proxy_to_worker_time_end
+                        - proxy_to_encode_time_start  # type: ignore
+                    )
 
             if isinstance(response, Exception):
                 raise response
@@ -245,11 +252,18 @@ class Proxy(EngineClient):
                     and isinstance(response, GenerationResponse)
                     and response.proxy_to_worker_time_end
                 ):
-                    self.proxy_to_pd_time_count[idx] += 1
-                    self.proxy_to_pd_time_total[idx] += (
-                        response.proxy_to_worker_time_end
-                        - proxy_to_pd_time_start  # type: ignore
-                    )
+                    if self.proxy_to_pd_time_count.get(idx) is None:
+                        self.proxy_to_pd_time_count[idx] = 1
+                        self.proxy_to_pd_time_total[idx] = (
+                            response.proxy_to_worker_time_end
+                            - proxy_to_pd_time_start  # type: ignore
+                        )
+                    else:
+                        self.proxy_to_pd_time_count[idx] += 1
+                        self.proxy_to_pd_time_total[idx] += (
+                            response.proxy_to_worker_time_end
+                            - proxy_to_pd_time_start  # type: ignore
+                        )
                 finished = response.finish_reason is not None
                 yield response
         finally:
