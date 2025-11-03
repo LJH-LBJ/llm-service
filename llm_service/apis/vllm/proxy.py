@@ -135,10 +135,10 @@ class Proxy(EngineClient):
             task="generate",
             seed=42,
         )
-        self.proxy_to_pd_time_count: float = 0
-        self.proxy_to_pd_time_total: float = 0
-        self.proxy_to_encode_time_count: float = 0
-        self.proxy_to_encode_time_total: float = 0
+        self.proxy_to_pd_time_count: dict[int, float] = {}
+        self.proxy_to_pd_time_total: dict[int, float] = {}
+        self.proxy_to_encode_time_count: dict[int, float] = {}
+        self.proxy_to_encode_time_total: dict[int, float] = {}
 
     def shutdown(self):
         self.ctx.destroy()
@@ -190,8 +190,8 @@ class Proxy(EngineClient):
                 and isinstance(response, GenerationResponse)
                 and response.proxy_to_worker_time_end
             ):
-                self.proxy_to_encode_time_count += 1
-                self.proxy_to_encode_time_total += (
+                self.proxy_to_encode_time_count[idx] += 1
+                self.proxy_to_encode_time_total[idx] += (
                     response.proxy_to_worker_time_end
                     - proxy_to_encode_time_start  # type: ignore
                 )
@@ -245,8 +245,8 @@ class Proxy(EngineClient):
                     and isinstance(response, GenerationResponse)
                     and response.proxy_to_worker_time_end
                 ):
-                    self.proxy_to_pd_time_count += 1
-                    self.proxy_to_pd_time_total += (
+                    self.proxy_to_pd_time_count[idx] += 1
+                    self.proxy_to_pd_time_total[idx] += (
                         response.proxy_to_worker_time_end
                         - proxy_to_pd_time_start  # type: ignore
                     )
@@ -542,14 +542,15 @@ class Proxy(EngineClient):
                 # calculate proxy to pd/encode time average
                 # add to metrics
                 proxy2pd_avg = (
-                    self.proxy_to_pd_time_total / self.proxy_to_pd_time_count
-                    if self.proxy_to_pd_time_count > 0
+                    self.proxy_to_pd_time_total[id] 
+                    / self.proxy_to_pd_time_count[id]
+                    if self.proxy_to_pd_time_count[id] > 0
                     else 0.0
                 )
                 proxy2encode_avg = (
-                    self.proxy_to_encode_time_total
-                    / self.proxy_to_encode_time_count
-                    if self.proxy_to_encode_time_count > 0
+                    self.proxy_to_encode_time_total[id]
+                    / self.proxy_to_encode_time_count[id]
+                    if self.proxy_to_encode_time_count[id] > 0
                     else 0.0
                 )
                 for engine_id in response.metrics:
