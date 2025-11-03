@@ -41,8 +41,8 @@ from vllm.pooling_params import PoolingParams
 from vllm.sampling_params import SamplingParams
 from vllm.transformers_utils.tokenizer import AnyTokenizer
 from vllm.utils import Device
+import llm_service.envs as llm_service_envs
 
-TIMECOUNT_ENABLED = os.getenv("TIMECOUNT_ENABLED", "0") in ("1", "true", "True")
 
 logger = init_logger(__name__)
 
@@ -181,12 +181,12 @@ class Proxy(EngineClient):
         )
         try:
             socket = self.to_encode_sockets[idx]
-            if TIMECOUNT_ENABLED:
+            if llm_service_envs.TIMECOUNT_ENABLED:
                 proxy_to_encode_time_start = time.perf_counter()
             await socket.send_multipart(msg, copy=False)
             response = await q.get()
             if (
-                TIMECOUNT_ENABLED
+                llm_service_envs.TIMECOUNT_ENABLED
                 and isinstance(response, GenerationResponse)
                 and response.proxy_to_worker_time_end
             ):
@@ -232,7 +232,7 @@ class Proxy(EngineClient):
 
         try:
             socket = self.to_pd_sockets[idx]
-            if TIMECOUNT_ENABLED:
+            if llm_service_envs.TIMECOUNT_ENABLED:
                 proxy_to_pd_time_start = time.perf_counter()
             await socket.send_multipart(msg, copy=False)
             finished = False
@@ -241,7 +241,7 @@ class Proxy(EngineClient):
                 if isinstance(response, Exception):
                     raise response
                 if (
-                    TIMECOUNT_ENABLED
+                    llm_service_envs.TIMECOUNT_ENABLED
                     and isinstance(response, GenerationResponse)
                     and response.proxy_to_worker_time_end
                 ):

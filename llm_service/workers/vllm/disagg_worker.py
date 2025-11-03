@@ -26,8 +26,7 @@ from llm_service.protocol.protocol import (
 from vllm.engine.protocol import EngineClient
 from vllm.logger import init_logger
 import vllm.envs as envs
-
-TIMECOUNT_ENABLED = os.getenv("TIMECOUNT_ENABLED", "0") in ("1", "true", "True")
+import llm_service.envs as llm_service_envs
 
 logger = init_logger(__name__)
 
@@ -71,7 +70,7 @@ class DisaggWorker:
 
         poller = zmq.asyncio.Poller()
         poller.register(self.from_proxy, zmq.POLLIN)
-        if TIMECOUNT_ENABLED:
+        if llm_service_envs.TIMECOUNT_ENABLED:
             # log engine stats (logger stats and EPD stats (if enabled))
             async def _force_log():
                 while True:
@@ -169,7 +168,7 @@ class DisaggWorker:
                 response = GenerationResponse.from_request_output(
                     request_output
                 )
-                if TIMECOUNT_ENABLED and first_token_flag:
+                if llm_service_envs.TIMECOUNT_ENABLED and first_token_flag:
                     response.proxy_to_worker_time_end = recv_timestamp
                     first_token_flag = False
                 response_bytes = self.encoder.encode(response)
