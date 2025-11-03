@@ -136,14 +136,14 @@ class Proxy(EngineClient):
             task="generate",
             seed=42,
         )
-        self.proxy_to_pd_time_count: defaultdict[int, float] = defaultdict(
-            float
+        self.proxy_to_pd_time_count: defaultdict[int, int] = defaultdict(
+            int
         )
         self.proxy_to_pd_time_total: defaultdict[int, float] = defaultdict(
             float
         )
-        self.proxy_to_encode_time_count: defaultdict[int, float] = defaultdict(
-            float
+        self.proxy_to_encode_time_count: defaultdict[int, int] = defaultdict(
+            int
         )
         self.proxy_to_encode_time_total: defaultdict[int, float] = defaultdict(
             float
