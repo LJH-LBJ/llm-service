@@ -132,9 +132,9 @@ class DisaggWorker:
         await self.to_proxy.send_multipart(msg, copy=False)
 
     async def _metrics_handler(self, req: MetricsRequest):
-        stats_logger: Optional[
-            dict[int, dict[str, Union[int, float]]]
-        ] = DisaggWorkerStatsLogger.get_stats_snapshot_avg()
+        stats_logger: Optional[dict[int, dict[str, Union[int, float]]]] = (
+            DisaggWorkerStatsLogger.get_stats_snapshot_avg()
+        )
         msg = (
             ResponseType.METRICS,
             self.encoder.encode(

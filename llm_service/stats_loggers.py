@@ -21,10 +21,12 @@ logger.addHandler(handler)
 
 
 class DisaggWorkerStatsLogger(StatLoggerBase):
-
     _LOCK: ClassVar[threading.Lock] = threading.Lock()
     # { engine_idx: { key: {"latest": float, "overall": float}, ... } }
-    SNAPSHOTS_AVG: ClassVar[dict[int, dict[str, dict[str, Union[int, float]]]]] = {}
+    SNAPSHOTS_AVG: ClassVar[
+        dict[int, dict[str, dict[str, Union[int, float]]]]
+    ] = {}
+
     def __init__(self, vllm_config: VllmConfig, engine_index: int = 0):
         self.EPD_STATS_KEYS = [
             "e2e_time_requests",
