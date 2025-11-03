@@ -7,7 +7,6 @@ from llm_service.workers.vllm.disagg_worker import DisaggWorker
 from vllm.v1.engine.async_llm import AsyncLLM
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.protocol import EngineClient
-from vllm.entrypoints.openai.api_server import build_async_engine_client
 from vllm.logger import init_logger
 from vllm.utils import FlexibleArgumentParser
 from vllm.version import __version__ as VLLM_VERSION

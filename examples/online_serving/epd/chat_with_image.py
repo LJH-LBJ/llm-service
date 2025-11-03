@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: Copyright contributors to the llm-service project
 import argparse
 import asyncio
-import os
 import uuid
 
 import numpy as np

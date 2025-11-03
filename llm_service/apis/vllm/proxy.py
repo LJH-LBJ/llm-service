@@ -547,7 +547,8 @@ class Proxy(EngineClient):
                     else 0.0
                 )
                 proxy2encode_avg = (
-                    self.proxy_to_encode_time_total / self.proxy_to_encode_time_count
+                    self.proxy_to_encode_time_total
+                    / self.proxy_to_encode_time_count
                     if self.proxy_to_encode_time_count > 0
                     else 0.0
                 )

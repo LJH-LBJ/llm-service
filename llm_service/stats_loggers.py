@@ -20,7 +20,6 @@ logger.addHandler(handler)
 
 
 class DisaggWorkerStatsLogger(StatLoggerBase):
-
     def __init__(self, vllm_config: VllmConfig, engine_index: int = 0):
         self.EPD_STATS_KEYS = [
             "e2e_time_requests",
@@ -46,16 +45,13 @@ class DisaggWorkerStatsLogger(StatLoggerBase):
         # [count_num, total_seconds]
         # init stats dict
         self.stats_dict = {
-            key: {
-                "latest": [0, 0.0],
-                "overall": [0, 0.0]
-            }
+            key: {"latest": [0, 0.0], "overall": [0, 0.0]}
             for key in self.EPD_STATS_KEYS
         }
-        self.stats_dict_avg: dict[str, dict[str,
-                                            Union[int,
-                                                  float]]] = defaultdict(dict)
-        '''
+        self.stats_dict_avg: dict[str, dict[str, Union[int, float]]] = (
+            defaultdict(dict)
+        )
+        """
         e.g.,
         self.stats_dict_avg = {
             "e2e_time_requests": {"latest": ..., "overall": ...},
@@ -65,7 +61,7 @@ class DisaggWorkerStatsLogger(StatLoggerBase):
             {"latest": ..., "overall": ...},
             "time_to_first_token": {"latest": ..., "overall": ...}
             }
-        '''
+        """
 
     def _reset(self, now):
         self.last_log_time = now
@@ -89,10 +85,12 @@ class DisaggWorkerStatsLogger(StatLoggerBase):
             return 0.0
         return float(tracked_stats / delta_time)
 
-    def record(self,
-               scheduler_stats: Optional[SchedulerStats],
-               iteration_stats: Optional[IterationStats],
-               engine_idx: int = 0):
+    def record(
+        self,
+        scheduler_stats: Optional[SchedulerStats],
+        iteration_stats: Optional[IterationStats],
+        engine_idx: int = 0,
+    ):
         """Log Stats to standard output."""
         if iteration_stats:
             self._track_iteration_stats(iteration_stats)
@@ -102,12 +100,18 @@ class DisaggWorkerStatsLogger(StatLoggerBase):
         now = time.monotonic()
         prompt_throughput = self._get_throughput(self.num_prompt_tokens, now)
         generation_throughput = self._get_throughput(
-            self.num_generation_tokens, now)
+            self.num_generation_tokens, now
+        )
 
         log_fn = logger.info
         if not any(
-            (prompt_throughput, generation_throughput,
-             self.last_prompt_throughput, self.last_generation_throughput)):
+            (
+                prompt_throughput,
+                generation_throughput,
+                self.last_prompt_throughput,
+                self.last_generation_throughput,
+            )
+        ):
             # Avoid log noise on an idle production system
             log_fn = logger.debug
         self.last_generation_throughput = generation_throughput
@@ -115,18 +119,23 @@ class DisaggWorkerStatsLogger(StatLoggerBase):
         # compute average stats
         self.stats_dict_avg = {
             key: {
-                phase: (self.stats_dict[key][phase][1] /
-                        self.stats_dict[key][phase][0]
-                        if self.stats_dict[key][phase][0] > 0 else 0.0)
+                phase: (
+                    self.stats_dict[key][phase][1]
+                    / self.stats_dict[key][phase][0]
+                    if self.stats_dict[key][phase][0] > 0
+                    else 0.0
+                )
                 for phase in ["latest", "overall"]
             }
             for key in self.EPD_STATS_KEYS
         }
 
-        log_msg = ("Engine %03d: " + ", ".join([
-            f"Avg {key.replace('_', ' ')}: %.3f ms"
-            for key in self.EPD_STATS_KEYS
-        ]))
+        log_msg = "Engine %03d: " + ", ".join(
+            [
+                f"Avg {key.replace('_', ' ')}: %.3f ms"
+                for key in self.EPD_STATS_KEYS
+            ]
+        )
 
         log_args = [self.engine_index] + [
             self.stats_dict_avg[key]["latest"] for key in self.EPD_STATS_KEYS
@@ -141,7 +150,7 @@ class DisaggWorkerStatsLogger(StatLoggerBase):
             **{
                 key: self.stats_dict_avg.get(key, {}).get("overall", 0.0)
                 for key in self.EPD_STATS_KEYS
-            }
+            },
         }
 
     # Observe per-request stats
@@ -150,10 +159,10 @@ class DisaggWorkerStatsLogger(StatLoggerBase):
         # update stats_dict
         # last item is time_to_first_token
         # it should be handled separately from time_to_first_tokens_iter
-        for finished_request in \
-            iteration_stats.finished_requests:
-            for key, attr in zip(self.EPD_STATS_KEYS[:-1],
-                                 self.finished_request_attr):
+        for finished_request in iteration_stats.finished_requests:
+            for key, attr in zip(
+                self.EPD_STATS_KEYS[:-1], self.finished_request_attr
+            ):
                 value = getattr(finished_request, attr, 0.0)
                 value *= 1000.0  # convert to milliseconds
                 self.stats_dict[key]["latest"][0] += 1
@@ -171,8 +180,10 @@ class DisaggWorkerStatsLogger(StatLoggerBase):
         if self.vllm_config.cache_config.num_gpu_blocks:
             logger.info(
                 "Engine %03d: vllm cache_config_info with initialization "
-                "after num_gpu_blocks is: %d", self.engine_index,
-                self.vllm_config.cache_config.num_gpu_blocks)
+                "after num_gpu_blocks is: %d",
+                self.engine_index,
+                self.vllm_config.cache_config.num_gpu_blocks,
+            )
 
 
 class MetricsReporter:
@@ -215,7 +226,9 @@ class MetricsReporter:
         else:
             log_msg += "Avg proxy to pd requests: %.3f ms, "
         msg = ""
-        for iid, work_addr, result in zip(self._instances.keys(), self.addr, results):
+        for iid, work_addr, result in zip(
+            self._instances.keys(), self.addr, results
+        ):
             if isinstance(result, dict):
                 for _, value in result.items():
                     msg = log_msg % (
