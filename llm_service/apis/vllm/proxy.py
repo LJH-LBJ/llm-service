@@ -29,7 +29,7 @@ from llm_service.protocol.protocol import (
 from llm_service.request_stats import RequestStatsMonitor
 from llm_service.routing_logic import RandomRouter, RoutingInterface
 from llm_service.service_discovery import HealthCheckServiceDiscovery
-from llm_service.metrics_reporter import MetricsReporter
+from llm_service.stats_loggers import MetricsReporter
 
 from vllm.engine.protocol import EngineClient
 from vllm.inputs.data import PromptType
