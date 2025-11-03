@@ -170,7 +170,7 @@ class DisaggWorker:
                     request_output
                 )
                 if llm_service_envs.TIMECOUNT_ENABLED and first_token_flag:
-                    response.proxy_to_worker_time_end = recv_timestamp # type: ignore
+                    response.proxy_to_worker_time_end = recv_timestamp  # type: ignore
                     first_token_flag = False
                 response_bytes = self.encoder.encode(response)
                 msg = make_msg_func(response_bytes)

@@ -136,10 +136,18 @@ class Proxy(EngineClient):
             task="generate",
             seed=42,
         )
-        self.proxy_to_pd_time_count: defaultdict[int, float] = defaultdict(float)
-        self.proxy_to_pd_time_total: defaultdict[int, float] = defaultdict(float)
-        self.proxy_to_encode_time_count: defaultdict[int, float] = defaultdict(float)
-        self.proxy_to_encode_time_total: defaultdict[int, float] = defaultdict(float)
+        self.proxy_to_pd_time_count: defaultdict[int, float] = defaultdict(
+            float
+        )
+        self.proxy_to_pd_time_total: defaultdict[int, float] = defaultdict(
+            float
+        )
+        self.proxy_to_encode_time_count: defaultdict[int, float] = defaultdict(
+            float
+        )
+        self.proxy_to_encode_time_total: defaultdict[int, float] = defaultdict(
+            float
+        )
 
     def shutdown(self):
         self.ctx.destroy()
@@ -543,7 +551,7 @@ class Proxy(EngineClient):
                 # calculate proxy to pd/encode time average
                 # add to metrics
                 proxy2pd_avg = (
-                    self.proxy_to_pd_time_total[id] 
+                    self.proxy_to_pd_time_total[id]
                     / self.proxy_to_pd_time_count[id]
                     if self.proxy_to_pd_time_count[id] > 0
                     else 0.0
