@@ -6,7 +6,6 @@ import os
 from typing import Any, Callable
 
 _TRUE_VALUES = {"1", "true", "t", "y", "yes", "on"}
-_FALSE_VALUES = {"0", "false", "f", "n", "no", "off"}
 
 # --8<-- [start:env-vars-definition]
 environment_variables: dict[str, Callable[[], Any]] = {

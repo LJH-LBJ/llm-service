@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the llm-service project
 
 import asyncio
+from collections import defaultdict
 import os
 import time
 import uuid
@@ -135,10 +136,10 @@ class Proxy(EngineClient):
             task="generate",
             seed=42,
         )
-        self.proxy_to_pd_time_count: dict[int, float] = {}
-        self.proxy_to_pd_time_total: dict[int, float] = {}
-        self.proxy_to_encode_time_count: dict[int, float] = {}
-        self.proxy_to_encode_time_total: dict[int, float] = {}
+        self.proxy_to_pd_time_count: defaultdict[int, float] = defaultdict(float)
+        self.proxy_to_pd_time_total: defaultdict[int, float] = defaultdict(float)
+        self.proxy_to_encode_time_count: defaultdict[int, float] = defaultdict(float)
+        self.proxy_to_encode_time_total: defaultdict[int, float] = defaultdict(float)
 
     def shutdown(self):
         self.ctx.destroy()
@@ -190,18 +191,11 @@ class Proxy(EngineClient):
                 and isinstance(response, GenerationResponse)
                 and response.proxy_to_worker_time_end
             ):
-                if self.proxy_to_encode_time_count.get(idx) is None:
-                    self.proxy_to_encode_time_count[idx] = 1
-                    self.proxy_to_encode_time_total[idx] = (
-                        response.proxy_to_worker_time_end
-                        - proxy_to_encode_time_start  # type: ignore
-                    )
-                else:
-                    self.proxy_to_encode_time_count[idx] += 1
-                    self.proxy_to_encode_time_total[idx] += (
-                        response.proxy_to_worker_time_end
-                        - proxy_to_encode_time_start  # type: ignore
-                    )
+                self.proxy_to_encode_time_count[idx] += 1
+                self.proxy_to_encode_time_total[idx] += (
+                    response.proxy_to_worker_time_end
+                    - proxy_to_encode_time_start  # type: ignore
+                )
 
             if isinstance(response, Exception):
                 raise response
@@ -252,18 +246,11 @@ class Proxy(EngineClient):
                     and isinstance(response, GenerationResponse)
                     and response.proxy_to_worker_time_end
                 ):
-                    if self.proxy_to_pd_time_count.get(idx) is None:
-                        self.proxy_to_pd_time_count[idx] = 1
-                        self.proxy_to_pd_time_total[idx] = (
-                            response.proxy_to_worker_time_end
-                            - proxy_to_pd_time_start  # type: ignore
-                        )
-                    else:
-                        self.proxy_to_pd_time_count[idx] += 1
-                        self.proxy_to_pd_time_total[idx] += (
-                            response.proxy_to_worker_time_end
-                            - proxy_to_pd_time_start  # type: ignore
-                        )
+                    self.proxy_to_pd_time_count[idx] += 1
+                    self.proxy_to_pd_time_total[idx] += (
+                        response.proxy_to_worker_time_end
+                        - proxy_to_pd_time_start  # type: ignore
+                    )
                 finished = response.finish_reason is not None
                 yield response
         finally:
