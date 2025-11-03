@@ -2,14 +2,15 @@
 # SPDX-FileCopyrightText: Copyright contributors to the llm-service project
 
 import uvloop
-
+from llm_service.stats_loggers import DisaggWorkerStatsLogger
 from llm_service.workers.vllm.disagg_worker import DisaggWorker
-from vllm.engine.async_llm_engine import AsyncEngineArgs
+from vllm.v1.engine.async_llm import AsyncLLM
+from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.protocol import EngineClient
-from vllm.entrypoints.openai.api_server import build_async_engine_client
 from vllm.logger import init_logger
 from vllm.utils import FlexibleArgumentParser
 from vllm.version import __version__ as VLLM_VERSION
+import llm_service.envs as llm_service_envs
 import signal
 
 logger = init_logger(__name__)
@@ -39,8 +40,18 @@ async def main(args) -> None:
     logger.info("Disaggregated Worker Server, vLLM ver. %s", VLLM_VERSION)
     logger.info("Args: %s", args)
 
-    async with build_async_engine_client(args) as engine:
+    stat_loggers = None
+    if llm_service_envs.TIMECOUNT_ENABLED:
+        stat_loggers = [DisaggWorkerStatsLogger]
+        logger.info("Time counting is enabled.")
+
+    engine_args = AsyncEngineArgs.from_cli_args(args)
+
+    engine = AsyncLLM.from_engine_args(engine_args, stat_loggers=stat_loggers)
+    try:
         await run(args, engine)
+    finally:
+        engine.shutdown()
 
 
 if __name__ == "__main__":

@@ -3,7 +3,8 @@
 
 import asyncio
 import os
-from typing import Any
+import time
+from typing import Any, Optional, Union
 
 import msgspec
 import numpy as np
@@ -11,17 +12,22 @@ from numpy.typing import NDArray
 import zmq
 import zmq.asyncio
 
+from llm_service.stats_loggers import DisaggWorkerStatsLogger
 from llm_service.protocol.protocol import (
     FailureResponse,
     GenerationRequest,
     GenerationResponse,
     HeartbeatRequest,
     HeartbeatResponse,
+    MetricsRequest,
+    MetricsResponse,
     RequestType,
     ResponseType,
 )
 from vllm.engine.protocol import EngineClient
 from vllm.logger import init_logger
+import vllm.envs as envs
+import llm_service.envs as llm_service_envs
 
 logger = init_logger(__name__)
 
@@ -34,7 +40,6 @@ class DisaggWorker:
         proxy_addr: str,
     ):
         self.engine = engine
-
         self.worker_addr = f"ipc://{address}"
         self.proxy_addr = f"ipc://{proxy_addr}"
         self.ctx = zmq.asyncio.Context()
@@ -46,6 +51,7 @@ class DisaggWorker:
         self.decoder_generate = msgspec.msgpack.Decoder(GenerationRequest)
         self.decoder_heartbeat = msgspec.msgpack.Decoder(HeartbeatRequest)
         self.decoder_abort = msgspec.msgpack.Decoder(GenerationRequest)
+        self.decoder_metrics = msgspec.msgpack.Decoder(MetricsRequest)
         self.encoder = msgspec.msgpack.Encoder()
 
         self.running_requests: set[asyncio.Task] = set()
@@ -65,7 +71,16 @@ class DisaggWorker:
 
         poller = zmq.asyncio.Poller()
         poller.register(self.from_proxy, zmq.POLLIN)
+        if llm_service_envs.TIMECOUNT_ENABLED:
+            # log engine stats (logger stats and EPD stats (if enabled))
+            async def _force_log():
+                while True:
+                    await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
+                    await self.engine.do_log_stats()
 
+            task = asyncio.create_task(_force_log())
+            self.running_requests.add(task)
+            task.add_done_callback(self.running_requests.discard)
         while True:
             req_type, req_data = await self.from_proxy.recv_multipart()
             await self._handle_request(req_type, req_data)
@@ -84,6 +99,9 @@ class DisaggWorker:
         elif req_type == RequestType.HEARTBEAT:
             hb_req = self.decoder_heartbeat.decode(req_data)
             await self._heartbeat_handler(hb_req)
+        elif req_type == RequestType.METRICS:
+            metrics_req = self.decoder_metrics.decode(req_data)
+            await self._metrics_handler(metrics_req)
         else:
             raise Exception(f"Unknown Request Type: {req_type.decode()}.")
 
@@ -113,13 +131,28 @@ class DisaggWorker:
         )
         await self.to_proxy.send_multipart(msg, copy=False)
 
+    async def _metrics_handler(self, req: MetricsRequest):
+        stats_logger: Optional[dict[int, dict[str, Union[int, float]]]] = (
+            DisaggWorkerStatsLogger.get_stats_snapshot_avg()
+        )
+        msg = (
+            ResponseType.METRICS,
+            self.encoder.encode(
+                MetricsResponse(request_id=req.request_id, metrics=stats_logger)
+            ),
+        )
+        await self.to_proxy.send_multipart(msg, copy=False)
+
     async def _generate(
         self,
         req: GenerationRequest,
         make_msg_func,
     ):
         request_id = req.request_id
-
+        # time of the first token worker receive request from proxy
+        if llm_service_envs.TIMECOUNT_ENABLED:
+            recv_timestamp = time.perf_counter()
+        first_token_flag = True
         try:
             prompt_payload: dict[str, Any] = {"prompt": req.prompt}
             if req.multi_modal_data is not None:
@@ -137,7 +170,9 @@ class DisaggWorker:
                 response = GenerationResponse.from_request_output(
                     request_output
                 )
-
+                if llm_service_envs.TIMECOUNT_ENABLED and first_token_flag:
+                    response.proxy_to_worker_time_end = recv_timestamp  # type: ignore
+                    first_token_flag = False
                 response_bytes = self.encoder.encode(response)
                 msg = make_msg_func(response_bytes)
                 await self.to_proxy.send_multipart(msg, copy=False)

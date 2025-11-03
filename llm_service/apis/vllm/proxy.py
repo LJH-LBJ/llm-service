@@ -2,7 +2,9 @@
 # SPDX-FileCopyrightText: Copyright contributors to the llm-service project
 
 import asyncio
+from collections import defaultdict
 import os
+import time
 import uuid
 from collections.abc import AsyncGenerator, Mapping
 from typing import Any, Optional, Union
@@ -12,14 +14,15 @@ import numpy as np
 import zmq
 import zmq.asyncio
 
-from vllm.config import DecodingConfig, ModelConfig, VllmConfig
-from vllm.core.scheduler import SchedulerOutputs
+from vllm.config import ModelConfig, VllmConfig
 from llm_service.protocol.protocol import (
     FailureResponse,
     GenerationRequest,
     GenerationResponse,
     HeartbeatRequest,
     HeartbeatResponse,
+    MetricsRequest,
+    MetricsResponse,
     RequestType,
     ResponseType,
     ServerType,
@@ -27,6 +30,8 @@ from llm_service.protocol.protocol import (
 from llm_service.request_stats import RequestStatsMonitor
 from llm_service.routing_logic import RandomRouter, RoutingInterface
 from llm_service.service_discovery import HealthCheckServiceDiscovery
+from llm_service.stats_loggers import MetricsReporter
+
 from vllm.engine.protocol import EngineClient
 from vllm.inputs.data import PromptType
 from vllm.inputs.preprocess import InputPreprocessor
@@ -34,12 +39,11 @@ from vllm.logger import init_logger
 from vllm.lora.request import LoRARequest
 from vllm.outputs import CompletionOutput, PoolingRequestOutput, RequestOutput
 from vllm.pooling_params import PoolingParams
-from vllm.prompt_adapter.request import PromptAdapterRequest
 from vllm.sampling_params import SamplingParams
 from vllm.transformers_utils.tokenizer import AnyTokenizer
-from vllm.transformers_utils.tokenizer_group import TokenizerGroup
 from vllm.utils import Device
-from vllm.v1.outputs import SamplerOutput
+import llm_service.envs as llm_service_envs
+
 
 logger = init_logger(__name__)
 
@@ -99,6 +103,18 @@ class Proxy(EngineClient):
             health_threshold=self.health_threshold,
             health_check_func=self.check_health,
         )
+        self.pd_metrics_logger = MetricsReporter(
+            server_type=ServerType.PD_INSTANCE,
+            instances=list(range(len(self.pd_addr_list))),
+            addr=self.pd_addr_list,
+            get_metrics_func=self.get_metrics,
+        )
+        self.encoder_metrics_logger = MetricsReporter(
+            server_type=ServerType.E_INSTANCE,
+            instances=list(range(len(self.encode_addr_list))),
+            addr=self.encode_addr_list,
+            get_metrics_func=self.get_metrics,
+        )
         self.encode_request_stats_monitor = RequestStatsMonitor(
             list(range(len(self.encode_addr_list)))
         )
@@ -120,21 +136,15 @@ class Proxy(EngineClient):
             task="generate",
             seed=42,
         )
-
-        # Dummy: needed for EngineClient Protocol.
-        # TODO: refactor OAI Server to avoid needing this.
-        self.tokenizer = TokenizerGroup(
-            **dict(
-                tokenizer_id=self.model_config.tokenizer,
-                enable_lora=False,
-                max_num_seqs=1024,
-                max_loras=0,
-                max_input_length=None,
-                tokenizer_mode=self.model_config.tokenizer_mode,
-                trust_remote_code=self.model_config.trust_remote_code,
-                revision=self.model_config.tokenizer_revision,
-                truncation_side=self.model_config.truncation_side,
-            )
+        self.proxy_to_pd_time_count: defaultdict[int, int] = defaultdict(int)
+        self.proxy_to_pd_time_total: defaultdict[int, float] = defaultdict(
+            float
+        )
+        self.proxy_to_encode_time_count: defaultdict[int, int] = defaultdict(
+            int
+        )
+        self.proxy_to_encode_time_total: defaultdict[int, float] = defaultdict(
+            float
         )
 
     def shutdown(self):
@@ -145,6 +155,10 @@ class Proxy(EngineClient):
         socket_path = self.proxy_addr.replace("ipc://", "")
         if os.path.exists(socket_path):
             os.remove(socket_path)
+
+    async def log_metrics(self) -> None:
+        await self.pd_metrics_logger.get_metrics()
+        await self.encoder_metrics_logger.get_metrics()
 
     async def _run_encode(
         self,
@@ -174,8 +188,21 @@ class Proxy(EngineClient):
         )
         try:
             socket = self.to_encode_sockets[idx]
+            if llm_service_envs.TIMECOUNT_ENABLED:
+                proxy_to_encode_time_start = time.perf_counter()
             await socket.send_multipart(msg, copy=False)
             response = await q.get()
+            if (
+                llm_service_envs.TIMECOUNT_ENABLED
+                and isinstance(response, GenerationResponse)
+                and response.proxy_to_worker_time_end
+            ):
+                self.proxy_to_encode_time_count[idx] += 1
+                self.proxy_to_encode_time_total[idx] += (
+                    response.proxy_to_worker_time_end
+                    - proxy_to_encode_time_start  # type: ignore
+                )
+
             if isinstance(response, Exception):
                 raise response
         finally:
@@ -212,12 +239,24 @@ class Proxy(EngineClient):
 
         try:
             socket = self.to_pd_sockets[idx]
+            if llm_service_envs.TIMECOUNT_ENABLED:
+                proxy_to_pd_time_start = time.perf_counter()
             await socket.send_multipart(msg, copy=False)
             finished = False
             while not finished:
                 response = await q.get()
                 if isinstance(response, Exception):
                     raise response
+                if (
+                    llm_service_envs.TIMECOUNT_ENABLED
+                    and isinstance(response, GenerationResponse)
+                    and response.proxy_to_worker_time_end
+                ):
+                    self.proxy_to_pd_time_count[idx] += 1
+                    self.proxy_to_pd_time_total[idx] += (
+                        response.proxy_to_worker_time_end
+                        - proxy_to_pd_time_start  # type: ignore
+                    )
                 finished = response.finish_reason is not None
                 yield response
         finally:
@@ -260,9 +299,7 @@ class Proxy(EngineClient):
         request_id: Optional[str] = None,
         lora_request: Optional[LoRARequest] = None,
         trace_headers: Optional[Mapping[str, str]] = None,
-        prompt_adapter_request: Optional[PromptAdapterRequest] = None,
         priority: int = 0,
-        data_parallel_rank: Optional[int] = None,
     ):
         # lazy initialization
         if self.output_handler is None:
@@ -345,6 +382,7 @@ class Proxy(EngineClient):
         decoder = msgspec.msgpack.Decoder(GenerationResponse)
         failure_decoder = msgspec.msgpack.Decoder(FailureResponse)
         heartbeat_decoder = msgspec.msgpack.Decoder(HeartbeatResponse)
+        metrics_decoder = msgspec.msgpack.Decoder(MetricsResponse)
         try:
             socket = self.ctx.socket(zmq.constants.PULL)
             socket.bind(self.proxy_addr)
@@ -384,7 +422,10 @@ class Proxy(EngineClient):
 
                 # Decode response according to its type.
                 resp: Union[
-                    GenerationResponse, HeartbeatResponse, FailureResponse
+                    GenerationResponse,
+                    HeartbeatResponse,
+                    FailureResponse,
+                    MetricsResponse,
                 ]
                 if resp_type in (ResponseType.GENERATION, ResponseType.ENCODE):
                     resp = decoder.decode(payload)
@@ -392,6 +433,8 @@ class Proxy(EngineClient):
                     resp = heartbeat_decoder.decode(payload)
                 elif resp_type == ResponseType.FAILURE:
                     resp = failure_decoder.decode(payload)
+                elif resp_type == ResponseType.METRICS:
+                    resp = metrics_decoder.decode(payload)
                 else:
                     raise RuntimeError(
                         f"Unknown response type from worker: {resp_type.decode()}"
@@ -432,31 +475,23 @@ class Proxy(EngineClient):
     async def abort(self, request_id: str) -> None:
         raise NotImplementedError
 
+    async def get_vllm_config(self) -> VllmConfig:
+        """Get the vllm configuration of the vLLM engine."""
+        raise NotImplementedError
+
     async def get_model_config(self) -> ModelConfig:
         return self.model_config
-
-    async def get_decoding_config(self) -> DecodingConfig:
-        raise NotImplementedError
 
     async def get_input_preprocessor(self) -> InputPreprocessor:
         raise NotImplementedError
 
-    async def get_tokenizer(
-        self,
-        lora_request: Optional[LoRARequest] = None,
-    ) -> AnyTokenizer:
-        if lora_request is not None:
-            raise NotImplementedError("LoRA is not yet supported.")
-        return self.tokenizer.get_lora_tokenizer(None)
+    async def get_tokenizer(self) -> AnyTokenizer:
+        raise NotImplementedError
 
     async def is_tracing_enabled(self) -> bool:
         return False
 
-    async def do_log_stats(
-        self,
-        scheduler_outputs: Optional[SchedulerOutputs] = None,
-        model_output: Optional[list[SamplerOutput]] = None,
-    ) -> None:
+    async def do_log_stats(self) -> None:
         pass
 
     async def check_health(self, server_type: ServerType, id: int):
@@ -491,6 +526,61 @@ class Proxy(EngineClient):
         finally:
             self.queues.pop(request_id, None)
 
+    async def get_metrics(self, server_type: ServerType, id: int):
+        request_id = str(uuid.uuid4())
+        request = MetricsRequest(request_id=request_id)
+        q: asyncio.Queue = asyncio.Queue()
+        self.queues[request_id] = q
+        try:
+            payload = self.encoder.encode(request)
+            msg = (RequestType.METRICS, payload)
+            if server_type == ServerType.PD_INSTANCE:
+                socket = self.to_pd_sockets[id]
+            else:
+                socket = self.to_encode_sockets[id]
+
+            await socket.send_multipart(msg, copy=False)
+            response = await q.get()
+            # calculate proxy to pd/encode time
+            if (
+                isinstance(response, MetricsResponse)
+                and response.metrics is not None
+            ):
+                # calculate proxy to pd/encode time average
+                # add to metrics
+                proxy2pd_avg = (
+                    self.proxy_to_pd_time_total[id]
+                    / self.proxy_to_pd_time_count[id]
+                    if self.proxy_to_pd_time_count[id] > 0
+                    else 0.0
+                )
+                proxy2encode_avg = (
+                    self.proxy_to_encode_time_total[id]
+                    / self.proxy_to_encode_time_count[id]
+                    if self.proxy_to_encode_time_count[id] > 0
+                    else 0.0
+                )
+                for engine_id in response.metrics:
+                    response.metrics[engine_id].update(
+                        {
+                            "proxy_to_pd_time_avg": proxy2pd_avg,
+                            "proxy_to_encode_time_avg": proxy2encode_avg,
+                        }
+                    )
+                return response.metrics
+            elif isinstance(response, Exception):
+                raise response
+            else:
+                return None
+
+        except Exception as e:
+            raise RuntimeError(
+                "Get metrics failed for %s %s, exception: %s"
+                % (server_type, id, e)
+            ) from e
+        finally:
+            self.queues.pop(request_id, None)
+
     async def start_profile(self) -> None:
         raise NotImplementedError
 
@@ -503,13 +593,13 @@ class Proxy(EngineClient):
     async def sleep(self, level: int = 1) -> None:
         raise NotImplementedError
 
-    async def wake_up(self) -> None:
+    async def wake_up(self, tags: list[str] | None = None) -> None:
         raise NotImplementedError
 
     async def is_sleeping(self) -> bool:
         return False
 
-    async def add_lora(self, lora_request: LoRARequest) -> None:
+    async def add_lora(self, lora_request: LoRARequest) -> bool:
         raise NotImplementedError
 
     @property
@@ -524,9 +614,6 @@ class Proxy(EngineClient):
 
     def is_stopped(self) -> bool:
         return False
-
-    async def get_vllm_config(self) -> VllmConfig:
-        raise NotImplementedError
 
     async def reset_mm_cache(self) -> None:
         raise NotImplementedError

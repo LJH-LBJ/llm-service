@@ -9,6 +9,8 @@ from PIL import Image
 
 from vllm import SamplingParams
 from llm_service.apis.vllm.proxy import Proxy
+import vllm.envs as envs
+import llm_service.envs as llm_service_envs
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--proxy-addr", required=True, help="Proxy address")
@@ -77,6 +79,10 @@ async def main():
             for i in range(10)
         ]
         await asyncio.gather(*tasks)
+        if llm_service_envs.TIMECOUNT_ENABLED:
+            # wait for logging
+            await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
+            await p.log_metrics()
     finally:
         p.shutdown()
 
