@@ -6,6 +6,7 @@ import os
 import time
 from typing import Any, Optional, Union
 
+from llm_service.stats_loggers import DisaggWorkerStatsLogger
 import msgspec
 import numpy as np
 from numpy.typing import NDArray
@@ -133,7 +134,7 @@ class DisaggWorker:
     async def _metrics_handler(self, req: MetricsRequest):
         stats_logger: Optional[
             dict[int, dict[str, Union[int, float]]]
-        ] = await self.engine.get_disagg_worker_stats()
+        ] = DisaggWorkerStatsLogger.get_stats_snapshot_avg()
         msg = (
             ResponseType.METRICS,
             self.encoder.encode(

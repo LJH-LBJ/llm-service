@@ -3,8 +3,9 @@
 
 import asyncio
 from collections import defaultdict
+import threading
 import time
-from typing import Optional, Union
+from typing import ClassVar, Optional, Union
 
 from llm_service.protocol.protocol import ServerType
 from vllm.v1.metrics.loggers import StatLoggerBase
@@ -20,6 +21,10 @@ logger.addHandler(handler)
 
 
 class DisaggWorkerStatsLogger(StatLoggerBase):
+
+    _LOCK: ClassVar[threading.Lock] = threading.Lock()
+    # { engine_idx: { key: {"latest": float, "overall": float}, ... } }
+    SNAPSHOTS_AVG: ClassVar[dict[int, dict[str, dict[str, Union[int, float]]]]] = {}
     def __init__(self, vllm_config: VllmConfig, engine_index: int = 0):
         self.EPD_STATS_KEYS = [
             "e2e_time_requests",
@@ -130,6 +135,18 @@ class DisaggWorkerStatsLogger(StatLoggerBase):
             for key in self.EPD_STATS_KEYS
         }
 
+        # write into class variable SNAPSHOTS_AVG
+        with self.__class__._LOCK:
+            # deepcopy from stats_dict_avg
+            snapshot = {
+                key: {
+                    "latest": float(self.stats_dict_avg[key]["latest"]),
+                    "overall": float(self.stats_dict_avg[key]["overall"]),
+                }
+                for key in self.EPD_STATS_KEYS
+            }
+            self.__class__.SNAPSHOTS_AVG[self.engine_index] = snapshot
+
         log_msg = "Engine %03d: " + ", ".join(
             [
                 f"Avg {key.replace('_', ' ')}: %.3f ms"
@@ -144,14 +161,24 @@ class DisaggWorkerStatsLogger(StatLoggerBase):
         # clear latest stats
         self._reset(now)
 
-    def get_epd_stats(self) -> dict[str, Union[int, float]]:
-        return {
-            "engine_index": self.engine_index,
-            **{
-                key: self.stats_dict_avg.get(key, {}).get("overall", 0.0)
-                for key in self.EPD_STATS_KEYS
-            },
+    # Get a snapshot of the current stats averages
+    @classmethod
+    def get_stats_snapshot_avg(cls) -> dict[int, dict[str, Union[int, float]]]:
+        """
+        return:
+        {
+          0: {"engine_index": 0, "e2e_time_requests": ..., ...},
+          1: {...},
         }
+        """
+        with cls._LOCK:
+            snapshot = {}
+            for idx, stats in cls.SNAPSHOTS_AVG.items():
+                snapshot[idx] = {
+                    "engine_index": idx,
+                    **{key: stats[key]["overall"] for key in stats},
+                }
+            return snapshot
 
     # Observe per-request stats
     # [latest_count_num, latest_seconds, overall_count_num, overall_seconds]
