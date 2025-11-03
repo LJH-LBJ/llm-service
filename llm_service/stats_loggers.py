@@ -1,0 +1,247 @@
+# SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the llm-service project
+
+import asyncio
+from collections import defaultdict
+import time
+from typing import Optional, Union
+
+from llm_service.protocol.protocol import ServerType
+from vllm.v1.metrics.loggers import StatLoggerBase
+from vllm.v1.metrics.stats import IterationStats, SchedulerStats
+from vllm.config import VllmConfig
+import logging
+
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+handler.setFormatter(logging.Formatter("%(levelname)s %(message)s"))
+logger.addHandler(handler)
+
+
+class DisaggWorkerStatsLogger(StatLoggerBase):
+
+    def __init__(self, vllm_config: VllmConfig, engine_index: int = 0):
+        self.EPD_STATS_KEYS = [
+            "e2e_time_requests",
+            "queue_time_requests",
+            "prefill_time_requests",
+            "mean_time_per_output_token_requests",
+            "time_to_first_token",
+        ]
+        self.finished_request_attr = [
+            "e2e_latency",
+            "queued_time",
+            "prefill_time",
+            "mean_time_per_output_token",
+        ]
+        self.engine_index = engine_index
+        self.vllm_config = vllm_config
+        self.last_scheduler_stats = SchedulerStats()
+        self.last_prompt_throughput: float = 0.0
+        self.last_generation_throughput: float = 0.0
+        self.last_log_time = time.monotonic()
+        self.num_prompt_tokens: int = 0
+        self.num_generation_tokens: int = 0
+        # [count_num, total_seconds]
+        # init stats dict
+        self.stats_dict = {
+            key: {
+                "latest": [0, 0.0],
+                "overall": [0, 0.0]
+            }
+            for key in self.EPD_STATS_KEYS
+        }
+        self.stats_dict_avg: dict[str, dict[str,
+                                            Union[int,
+                                                  float]]] = defaultdict(dict)
+        '''
+        e.g.,
+        self.stats_dict_avg = {
+            "e2e_time_requests": {"latest": ..., "overall": ...},
+            "queue_time_requests": {"latest": ..., "overall": ...},
+            "prefill_time_requests": {"latest": ..., "overall": ...},
+            "mean_time_per_output_token_requests": 
+            {"latest": ..., "overall": ...},
+            "time_to_first_token": {"latest": ..., "overall": ...}
+            }
+        '''
+
+    def _reset(self, now):
+        self.last_log_time = now
+
+        # Tracked stats over current local logging interval.
+        self.num_prompt_tokens = 0
+        self.num_generation_tokens = 0
+
+        for key in self.stats_dict:
+            self.stats_dict[key]["latest"] = [0, 0.0]
+
+    def _track_iteration_stats(self, iteration_stats: IterationStats):
+        # Save tracked stats for token counters.
+        self.num_prompt_tokens += iteration_stats.num_prompt_tokens
+        self.num_generation_tokens += iteration_stats.num_generation_tokens
+
+    def _get_throughput(self, tracked_stats: int, now: float) -> float:
+        # Compute summary metrics for tracked stats
+        delta_time = now - self.last_log_time
+        if delta_time <= 0.0:
+            return 0.0
+        return float(tracked_stats / delta_time)
+
+    def record(self,
+               scheduler_stats: Optional[SchedulerStats],
+               iteration_stats: Optional[IterationStats],
+               engine_idx: int = 0):
+        """Log Stats to standard output."""
+        if iteration_stats:
+            self._track_iteration_stats(iteration_stats)
+            self._observe(iteration_stats)
+
+    def log(self):
+        now = time.monotonic()
+        prompt_throughput = self._get_throughput(self.num_prompt_tokens, now)
+        generation_throughput = self._get_throughput(
+            self.num_generation_tokens, now)
+
+        log_fn = logger.info
+        if not any(
+            (prompt_throughput, generation_throughput,
+             self.last_prompt_throughput, self.last_generation_throughput)):
+            # Avoid log noise on an idle production system
+            log_fn = logger.debug
+        self.last_generation_throughput = generation_throughput
+        self.last_prompt_throughput = prompt_throughput
+        # compute average stats
+        self.stats_dict_avg = {
+            key: {
+                phase: (self.stats_dict[key][phase][1] /
+                        self.stats_dict[key][phase][0]
+                        if self.stats_dict[key][phase][0] > 0 else 0.0)
+                for phase in ["latest", "overall"]
+            }
+            for key in self.EPD_STATS_KEYS
+        }
+
+        log_msg = ("Engine %03d: " + ", ".join([
+            f"Avg {key.replace('_', ' ')}: %.3f ms"
+            for key in self.EPD_STATS_KEYS
+        ]))
+
+        log_args = [self.engine_index] + [
+            self.stats_dict_avg[key]["latest"] for key in self.EPD_STATS_KEYS
+        ]
+        log_fn(log_msg, *log_args)
+        # clear latest stats
+        self._reset(now)
+
+    def get_epd_stats(self) -> dict[str, Union[int, float]]:
+        return {
+            "engine_index": self.engine_index,
+            **{
+                key: self.stats_dict_avg.get(key, {}).get("overall", 0.0)
+                for key in self.EPD_STATS_KEYS
+            }
+        }
+
+    # Observe per-request stats
+    # [latest_count_num, latest_seconds, overall_count_num, overall_seconds]
+    def _observe(self, iteration_stats: IterationStats):
+        # update stats_dict
+        # last item is time_to_first_token
+        # it should be handled separately from time_to_first_tokens_iter
+        for finished_request in \
+            iteration_stats.finished_requests:
+            for key, attr in zip(self.EPD_STATS_KEYS[:-1],
+                                 self.finished_request_attr):
+                value = getattr(finished_request, attr, 0.0)
+                value *= 1000.0  # convert to milliseconds
+                self.stats_dict[key]["latest"][0] += 1
+                self.stats_dict[key]["latest"][1] += value
+                self.stats_dict[key]["overall"][0] += 1
+                self.stats_dict[key]["overall"][1] += value
+        for ttft in iteration_stats.time_to_first_tokens_iter:
+            ttft *= 1000.0  # convert to milliseconds
+            self.stats_dict["time_to_first_token"]["latest"][0] += 1
+            self.stats_dict["time_to_first_token"]["latest"][1] += ttft
+            self.stats_dict["time_to_first_token"]["overall"][0] += 1
+            self.stats_dict["time_to_first_token"]["overall"][1] += ttft
+
+    def log_engine_initialized(self):
+        if self.vllm_config.cache_config.num_gpu_blocks:
+            logger.info(
+                "Engine %03d: vllm cache_config_info with initialization "
+                "after num_gpu_blocks is: %d", self.engine_index,
+                self.vllm_config.cache_config.num_gpu_blocks)
+
+
+class MetricsReporter:
+    def __init__(
+        self,
+        server_type: ServerType,
+        instances: list[int],
+        addr: list[str],
+        get_metrics_func,
+    ):
+        self.server_type = server_type
+        self._instances = {iid: True for iid in instances}
+        self.addr = addr
+        self._get_metrics_func = get_metrics_func
+
+    async def get_metrics(self) -> None:
+        metrics = {}
+        tasks = [
+            asyncio.create_task(
+                asyncio.wait_for(
+                    self._get_metrics_func(self.server_type, iid),
+                    timeout=1.0,
+                )
+            )
+            for iid in self._instances
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        log_msg = (
+            "ec_role: %s, "
+            "addr: %s, "
+            "Engine %03d: "
+            "Avg e2e time requests: %.3f ms, "
+            "Avg queue time requests: %.3f ms, "
+            "Avg prefill time requests: %.3f ms, "
+            "Avg mean time per output token requests: %.3f ms, "
+            "Avg time to first token: %.3f ms, "
+        )
+        if self.server_type == ServerType.E_INSTANCE:
+            log_msg += "Avg proxy to encoder requests: %.3f ms, "
+        else:
+            log_msg += "Avg proxy to pd requests: %.3f ms, "
+        msg = ""
+        for iid, work_addr, result in zip(self._instances.keys(), self.addr, results):
+            if isinstance(result, dict):
+                for _, value in result.items():
+                    msg = log_msg % (
+                        self.server_type.name,
+                        work_addr,
+                        value.get("engine_index", 0),
+                        value.get("e2e_time_requests", 0.0),
+                        value.get("queue_time_requests", 0.0),
+                        value.get("prefill_time_requests", 0.0),
+                        value.get("mean_time_per_output_token_requests", 0.0),
+                        value.get("time_to_first_token", 0.0),
+                        value.get("proxy_to_encode_time_avg", 0.0)
+                        if self.server_type == ServerType.E_INSTANCE
+                        else value.get("proxy_to_pd_time_avg", 0.0),
+                    )
+
+                metrics[iid] = msg
+            else:
+                logger.warning(
+                    "Get metrics for %s %s failed, reason is (%s).",
+                    self.server_type,
+                    work_addr,
+                    "timeout"
+                    if isinstance(result, asyncio.TimeoutError)
+                    else result,
+                )
+        logger.info("Metrics for %s instances:" % self.server_type)
+        for iid, metric in metrics.items():
+            logger.info(metric)
