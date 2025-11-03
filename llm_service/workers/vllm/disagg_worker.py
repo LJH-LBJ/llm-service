@@ -6,13 +6,13 @@ import os
 import time
 from typing import Any, Optional, Union
 
-from llm_service.stats_loggers import DisaggWorkerStatsLogger
 import msgspec
 import numpy as np
 from numpy.typing import NDArray
 import zmq
 import zmq.asyncio
 
+from llm_service.stats_loggers import DisaggWorkerStatsLogger
 from llm_service.protocol.protocol import (
     FailureResponse,
     GenerationRequest,
