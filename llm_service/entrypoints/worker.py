@@ -44,6 +44,13 @@ async def main(args) -> None:
     if llm_service_envs.TIMECOUNT_ENABLED:
         stat_loggers = [DisaggWorkerStatsLogger]
         logger.info("Time counting is enabled.")
+    if args.ec_transfer_config.ec_role == "ec_producer":
+        if getattr(args, "enable_prefix_caching", None) is None:
+            logger.error(
+                f"Encoder doesn't support prefix caching, "
+                f"disable it in the config."
+            )
+            args.enable_prefix_caching = False
 
     engine_args = AsyncEngineArgs.from_cli_args(args)
 
