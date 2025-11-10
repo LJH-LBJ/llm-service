@@ -4,6 +4,7 @@ import argparse
 import asyncio
 import uuid
 
+from llm_service.protocol.protocol import ServerType
 import numpy as np
 from PIL import Image
 
@@ -83,6 +84,8 @@ async def main():
             # wait for logging
             await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
             await p.log_metrics()
+        # test for exit_instance
+        await p.exit_instance(ServerType.PD_INSTANCE, addr="/tmp/prefill_decode_1")
     finally:
         p.shutdown()
 

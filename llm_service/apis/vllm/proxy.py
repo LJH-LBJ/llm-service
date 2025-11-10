@@ -16,6 +16,7 @@ import zmq.asyncio
 
 from vllm.config import ModelConfig, VllmConfig
 from llm_service.protocol.protocol import (
+    ExitRequest,
     FailureResponse,
     GenerationRequest,
     GenerationResponse,
@@ -26,6 +27,7 @@ from llm_service.protocol.protocol import (
     RequestType,
     ResponseType,
     ServerType,
+    ExitResponse,
 )
 from llm_service.request_stats import RequestStatsMonitor
 from llm_service.routing_logic import RandomRouter, RoutingInterface
@@ -145,6 +147,8 @@ class Proxy(EngineClient):
         self.proxy_to_encode_time_total: defaultdict[int, float] = defaultdict(
             float
         )
+        self.draining_pd: set[int] = set()
+        self.draining_encode: set[int] = set()
 
     def shutdown(self):
         self.ctx.destroy()
@@ -154,6 +158,14 @@ class Proxy(EngineClient):
         socket_path = self.proxy_addr.replace("ipc://", "")
         if os.path.exists(socket_path):
             os.remove(socket_path)
+
+    def _filter_draining_requests(self, candidates: list[int], server_type: ServerType) -> list[int]:
+        """Filter out the draining requests from the candidates."""
+        if server_type == ServerType.PD_INSTANCE:
+            result = [iid for iid in candidates if iid not in self.draining_pd]
+        else:
+            result = [iid for iid in candidates if iid not in self.draining_encode]
+        return result
 
     async def log_metrics(self) -> None:
         await self.pd_metrics_logger.get_metrics()
@@ -180,6 +192,8 @@ class Proxy(EngineClient):
 
         msg = (RequestType.ENCODE, payload)
         health_endpoints = self.encode_service_discovery.get_health_endpoints()
+        # Filter out draining endpoints
+        health_endpoints = self._filter_draining_requests(health_endpoints, ServerType.E_INSTANCE)
         request_stats = self.encode_request_stats_monitor.get_request_stats()
         idx = self.encode_router.route_request(health_endpoints, request_stats)
         self.encode_request_stats_monitor.on_new_request(
@@ -230,6 +244,8 @@ class Proxy(EngineClient):
 
         msg = (RequestType.GENERATION, payload)
         health_endpoints = self.pd_service_discovery.get_health_endpoints()
+        # Filter out draining endpoints
+        health_endpoints = self._filter_draining_requests(health_endpoints, ServerType.PD_INSTANCE)
         request_stats = self.pd_request_stats_monitor.get_request_stats()
         idx = self.pd_router.route_request(health_endpoints, request_stats)
         self.pd_request_stats_monitor.on_new_request(
@@ -434,6 +450,8 @@ class Proxy(EngineClient):
                     resp = failure_decoder.decode(payload)
                 elif resp_type == ResponseType.METRICS:
                     resp = metrics_decoder.decode(payload)
+                elif resp_type == ResponseType.SHUTDOWN:
+                    resp = msgspec.msgpack.decode(payload)
                 else:
                     raise RuntimeError(
                         f"Unknown response type from worker: {resp_type.decode()}"
@@ -588,6 +606,55 @@ class Proxy(EngineClient):
             ) from e
         finally:
             self.queues.pop(request_id, None)
+
+    async def exit_instance(self, server_type: ServerType, addr: str) -> None:
+        if addr is None:
+            logger.warning(
+                "Exit instance failed for %s, addr is None.", server_type
+            )
+            return
+        addr_ipc = f"ipc://{addr}"
+        sockets = self.to_pd_sockets if server_type == ServerType.PD_INSTANCE else self.to_encode_sockets
+        try:
+            # find instance id by addr
+            id = [s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets].index(addr_ipc)
+        except ValueError:
+            logger.warning(
+                "Exit instance failed for %s, addr %s not found.",
+                server_type,
+                addr_ipc,
+            )
+            return
+        # Create exit request
+        request_id = str(uuid.uuid4())
+        request = ExitRequest(request_id=request_id)
+        q: asyncio.Queue = asyncio.Queue()
+        self.queues[request_id] = q
+        try:
+            payload = self.encoder.encode(request)
+            msg = (RequestType.EXIT, payload)
+            if server_type == ServerType.PD_INSTANCE:
+                # the request need to be removed from routing pool before exit
+                self.draining_pd.add(id)
+                socket = self.to_pd_sockets[id]
+            else:
+                self.draining_encode.add(id)
+                socket = self.to_encode_sockets[id]
+            await socket.send_multipart(msg, copy=False)
+            response = await q.get()
+            if not isinstance(response, ExitResponse):
+                raise ValueError(
+                    "Unexpected response type, expected ExitResponse"
+                )
+            if response.status == "DONE":
+                logger.info("Instance %s has exited", id)
+            else:
+                logger.warning("Instance %s is still draining", id)
+
+        except Exception as e:
+            raise RuntimeError(
+                "Exit instance failed, exception: %s" % (e)
+            ) from e
 
     async def start_profile(self) -> None:
         raise NotImplementedError

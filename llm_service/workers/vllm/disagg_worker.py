@@ -14,6 +14,7 @@ import zmq.asyncio
 
 from llm_service.stats_loggers import DisaggWorkerStatsLogger
 from llm_service.protocol.protocol import (
+    ExitRequest,
     FailureResponse,
     GenerationRequest,
     GenerationResponse,
@@ -23,6 +24,7 @@ from llm_service.protocol.protocol import (
     MetricsResponse,
     RequestType,
     ResponseType,
+    ExitResponse,
 )
 from vllm.engine.protocol import EngineClient
 import vllm.envs as envs
@@ -53,8 +55,10 @@ class DisaggWorker:
         self.decoder_heartbeat = msgspec.msgpack.Decoder(HeartbeatRequest)
         self.decoder_abort = msgspec.msgpack.Decoder(GenerationRequest)
         self.decoder_metrics = msgspec.msgpack.Decoder(MetricsRequest)
+        self.decoder_exit = msgspec.msgpack.Decoder(ExitRequest)
         self.encoder = msgspec.msgpack.Encoder()
-
+        self.draining = False # whether the worker is draining
+        self.stopping = False # whether the worker is stopping
         self.running_requests: set[asyncio.Task] = set()
 
     def shutdown(self):
@@ -85,6 +89,9 @@ class DisaggWorker:
         while True:
             req_type, req_data = await self.from_proxy.recv_multipart()
             await self._handle_request(req_type, req_data)
+            if self.stopping:
+                break
+        self.shutdown()
 
     async def _handle_request(self, req_type: bytes, req_data: bytes):
         if req_type == RequestType.ENCODE:
@@ -103,6 +110,9 @@ class DisaggWorker:
         elif req_type == RequestType.METRICS:
             metrics_req = self.decoder_metrics.decode(req_data)
             await self._metrics_handler(metrics_req)
+        elif req_type == RequestType.EXIT:
+            exit_req = self.decoder_exit.decode(req_data)
+            await self._exit_handler(exit_req)
         else:
             raise Exception(f"Unknown Request Type: {req_type.decode()}.")
 
@@ -143,6 +153,42 @@ class DisaggWorker:
             ),
         )
         await self.to_proxy.send_multipart(msg, copy=False)
+
+    async def _exit_handler(self, req: ExitRequest):
+        if not self.draining:
+            self.draining = True
+        # send draining notice to proxy
+        msg = (
+            ResponseType.SHUTDOWN,
+            self.encoder.encode(
+                ExitResponse(
+                    request_id=req.request_id,
+                    status="DRAINING",
+                    in_flight=len(self.running_requests),
+                    reason=req.reason,
+                )
+            ),
+        )
+        await self.to_proxy.send_multipart(msg, copy=False)
+        # wait for all running requests to finish
+        if self.running_requests:
+            await asyncio.gather(*list(self.running_requests), return_exceptions=True)
+        # send instance shutdown notice to proxy
+        msg = (
+            ResponseType.SHUTDOWN,
+            self.encoder.encode(
+                ExitResponse(
+                    request_id=req.request_id,
+                    status="DONE",
+                    in_flight=0,
+                    reason=req.reason,
+                )
+            ),
+        )
+        await self.to_proxy.send_multipart(msg, copy=False)
+        # set stopping flag to exit busy loop
+        self.stopping = True
+        
 
     async def _generate(
         self,
