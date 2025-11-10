@@ -46,7 +46,7 @@ async def main(args) -> None:
         logger.info("Time counting is enabled.")
     if getattr(args.ec_transfer_config, "ec_role", None) == "ec_producer":
         if getattr(args, "enable_prefix_caching", None) in (None, True):
-            logger.error(
+            logger.warning(
                 "Encoder doesn't support prefix caching, "
                 "disable it in the config."
             )
