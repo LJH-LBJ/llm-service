@@ -39,7 +39,7 @@ class ResponseType:
     ENCODE = b"\x02"
     HEARTBEAT = b"\x03"
     METRICS = b"\x04"
-    SHUTDOWN = b"\x05"
+    EXIT = b"\x05"
 
 
 class GenerationResponse(msgspec.Struct):

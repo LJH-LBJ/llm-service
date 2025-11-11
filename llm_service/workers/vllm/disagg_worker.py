@@ -159,7 +159,7 @@ class DisaggWorker:
             self.draining = True
         # send draining notice to proxy
         msg = (
-            ResponseType.SHUTDOWN,
+            ResponseType.EXIT,
             self.encoder.encode(
                 ExitResponse(
                     request_id=req.request_id,
@@ -175,7 +175,7 @@ class DisaggWorker:
             await asyncio.gather(*list(self.running_requests), return_exceptions=True)
         # send instance shutdown notice to proxy
         msg = (
-            ResponseType.SHUTDOWN,
+            ResponseType.EXIT,
             self.encoder.encode(
                 ExitResponse(
                     request_id=req.request_id,

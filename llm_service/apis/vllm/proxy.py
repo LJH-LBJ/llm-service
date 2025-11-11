@@ -398,6 +398,7 @@ class Proxy(EngineClient):
         failure_decoder = msgspec.msgpack.Decoder(FailureResponse)
         heartbeat_decoder = msgspec.msgpack.Decoder(HeartbeatResponse)
         metrics_decoder = msgspec.msgpack.Decoder(MetricsResponse)
+        exit_decoder = msgspec.msgpack.Decoder(ExitResponse)
         try:
             socket = self.ctx.socket(zmq.constants.PULL)
             socket.bind(self.proxy_addr)
@@ -450,8 +451,8 @@ class Proxy(EngineClient):
                     resp = failure_decoder.decode(payload)
                 elif resp_type == ResponseType.METRICS:
                     resp = metrics_decoder.decode(payload)
-                elif resp_type == ResponseType.SHUTDOWN:
-                    resp = msgspec.msgpack.decode(payload)
+                elif resp_type == ResponseType.EXIT:
+                    resp = exit_decoder.decode(payload)
                 else:
                     raise RuntimeError(
                         f"Unknown response type from worker: {resp_type.decode()}"
