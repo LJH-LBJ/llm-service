@@ -458,7 +458,8 @@ class Proxy(EngineClient):
                         f"Unknown response type from worker: {resp_type.decode()}"
                     )
 
-                if resp.request_id not in self.queues:
+                if resp.request_id not in self.queues and\
+                    resp_type is not ResponseType.EXIT:
                     if resp_type not in (
                         ResponseType.HEARTBEAT,
                         ResponseType.METRICS,
@@ -672,10 +673,7 @@ class Proxy(EngineClient):
                     break
                 response = await q.get()
                 if isinstance(response, FailureResponse):
-                    raise RuntimeError(
-                        "Exit failed on instance %s id=%d: %s"
-                        % (server_type, id, response.error_message)
-                    )
+                    raise response
                 if not isinstance(response, ExitResponse):
                     raise ValueError(
                         "Unexpected response type, expected ExitResponse"

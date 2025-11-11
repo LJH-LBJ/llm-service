@@ -57,7 +57,6 @@ class DisaggWorker:
         self.decoder_metrics = msgspec.msgpack.Decoder(MetricsRequest)
         self.decoder_exit = msgspec.msgpack.Decoder(ExitRequest)
         self.encoder = msgspec.msgpack.Encoder()
-        self.draining = False # whether the worker is draining
         self.stopping = False # whether the worker is stopping
         self.running_requests: set[asyncio.Task] = set()
 
@@ -155,8 +154,6 @@ class DisaggWorker:
         await self.to_proxy.send_multipart(msg, copy=False)
 
     async def _exit_handler(self, req: ExitRequest):
-        if not self.draining:
-            self.draining = True
         # send draining notice to proxy
         msg = (
             ResponseType.EXIT,

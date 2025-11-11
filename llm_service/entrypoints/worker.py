@@ -1,7 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the llm-service project
 
+import asyncio
+import uuid
 import uvloop
+from llm_service.protocol.protocol import ExitRequest
 from llm_service.stats_loggers import DisaggWorkerStatsLogger
 from llm_service.workers.vllm.disagg_worker import DisaggWorker
 from vllm.v1.engine.async_llm import AsyncLLM
@@ -19,22 +22,31 @@ logger = init_logger(__name__)
 async def run(args, engine: EngineClient):
     logger.info("Initializing disaggregated worker")
 
-    def signal_handler(*_):
-        raise SystemExit()
-
-    signal.signal(signal.SIGTERM, signal_handler)
-
     worker = DisaggWorker(
         engine=engine,
         address=args.worker_addr,
         proxy_addr=args.proxy_addr,
     )
 
+    loop = asyncio.get_running_loop()
+    loop.add_signal_handler(signal.SIGTERM, signal_handler, worker)
+
     try:
         await worker.run_busy_loop()
     finally:
         worker.shutdown()
 
+async def do_graceful_exit(worker: DisaggWorker, reason: str) -> None:
+    # send exit request to the proxy
+    exit_req = ExitRequest(
+        request_id=str(uuid.uuid4()),
+        reason=reason
+    )
+    await worker._exit_handler(exit_req)
+    raise SystemExit()
+
+def signal_handler(worker: DisaggWorker) -> None:
+    asyncio.create_task(do_graceful_exit(worker, "SIGTERM received"))
 
 async def main(args) -> None:
     logger.info("Disaggregated Worker Server, vLLM ver. %s", VLLM_VERSION)
