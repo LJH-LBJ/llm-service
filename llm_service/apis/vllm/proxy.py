@@ -192,7 +192,7 @@ class Proxy(EngineClient):
 
         msg = (RequestType.ENCODE, payload)
         health_endpoints = self.encode_service_discovery.get_health_endpoints()
-        # Filter out draining endpoints
+        # do not route to draining endpoints
         health_endpoints = self._filter_draining_requests(health_endpoints, ServerType.E_INSTANCE)
         request_stats = self.encode_request_stats_monitor.get_request_stats()
         idx = self.encode_router.route_request(health_endpoints, request_stats)
@@ -244,7 +244,7 @@ class Proxy(EngineClient):
 
         msg = (RequestType.GENERATION, payload)
         health_endpoints = self.pd_service_discovery.get_health_endpoints()
-        # Filter out draining endpoints
+        # do not route to draining endpoints
         health_endpoints = self._filter_draining_requests(health_endpoints, ServerType.PD_INSTANCE)
         request_stats = self.pd_request_stats_monitor.get_request_stats()
         idx = self.pd_router.route_request(health_endpoints, request_stats)
