@@ -40,6 +40,7 @@ class ResponseType:
     HEARTBEAT = b"\x03"
     METRICS = b"\x04"
     EXIT = b"\x05"
+    SIGTERM = b"\x06"
 
 
 class GenerationResponse(msgspec.Struct):
@@ -109,3 +110,12 @@ class ExitResponse(msgspec.Struct):
     status: str  # "DRAINING" | "DONE"
     in_flight: int
     reason: Optional[str] = None
+
+
+class ShutdownRequest(msgspec.Struct):
+    request_id: str
+    addr: str
+    server_type: ServerType
+    status: str  # "DRAINING" | "DONE"
+    in_flight: int
+    reason: str

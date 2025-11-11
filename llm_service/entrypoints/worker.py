@@ -2,7 +2,6 @@
 # SPDX-FileCopyrightText: Copyright contributors to the llm-service project
 
 import asyncio
-import uuid
 import uvloop
 from llm_service.protocol.protocol import ExitRequest
 from llm_service.stats_loggers import DisaggWorkerStatsLogger
@@ -36,17 +35,11 @@ async def run(args, engine: EngineClient):
     finally:
         worker.shutdown()
 
-async def do_graceful_exit(worker: DisaggWorker, reason: str) -> None:
-    # send exit request to the proxy
-    exit_req = ExitRequest(
-        request_id=str(uuid.uuid4()),
-        reason=reason
-    )
-    await worker._exit_handler(exit_req)
-    raise SystemExit()
+async def do_SIGTERM_exit(worker: DisaggWorker, reason: str) -> None:
+    await worker._shutdown(reason)
 
 def signal_handler(worker: DisaggWorker) -> None:
-    asyncio.create_task(do_graceful_exit(worker, "SIGTERM received"))
+    asyncio.create_task(do_SIGTERM_exit(worker, "SIGTERM received"))
 
 async def main(args) -> None:
     logger.info("Disaggregated Worker Server, vLLM ver. %s", VLLM_VERSION)

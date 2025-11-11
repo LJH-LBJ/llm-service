@@ -5,6 +5,7 @@ import asyncio
 import os
 import time
 from typing import Any, Optional, Union
+import uuid
 
 import msgspec
 import numpy as np
@@ -25,6 +26,8 @@ from llm_service.protocol.protocol import (
     RequestType,
     ResponseType,
     ExitResponse,
+    ServerType,
+    ShutdownRequest,
 )
 from vllm.engine.protocol import EngineClient
 import vllm.envs as envs
@@ -153,7 +156,10 @@ class DisaggWorker:
         )
         await self.to_proxy.send_multipart(msg, copy=False)
 
+    # handle exit request from proxy
     async def _exit_handler(self, req: ExitRequest):
+        if self.stopping:
+            return
         # send draining notice to proxy
         msg = (
             ResponseType.EXIT,
@@ -185,7 +191,51 @@ class DisaggWorker:
         await self.to_proxy.send_multipart(msg, copy=False)
         # set stopping flag to exit busy loop
         self.stopping = True
-        
+
+    # graceful shutdown on SIGTERM
+    async def _shutdown(self, reason: str) -> None:
+        if self.stopping:
+            return
+        request_id=str(uuid.uuid4())
+        if "encoder" in self.proxy_addr:
+            server_type=ServerType.E_INSTANCE
+        else:
+            server_type=ServerType.PD_INSTANCE
+        # send exit request to the proxy
+        msg = (
+            ResponseType.SIGTERM,
+            self.encoder.encode(
+                ShutdownRequest(
+                    request_id=request_id,
+                    addr=self.worker_addr,
+                    server_type=server_type,
+                    status="DRAINING",
+                    in_flight=len(self.running_requests),
+                    reason=reason
+                )
+            ),
+        )
+        await self.to_proxy.send_multipart(msg, copy=False)
+        # wait for all running requests to finish
+        if self.running_requests:
+            await asyncio.gather(*list(self.running_requests), return_exceptions=True)
+        # send instance shutdown notice to proxy
+        msg = (
+            ResponseType.SIGTERM,
+            self.encoder.encode(
+                ShutdownRequest(
+                    request_id=request_id,
+                    addr=self.worker_addr,
+                    server_type=server_type,
+                    status="DONE",
+                    in_flight=0,
+                    reason=reason
+                )
+            ),
+        )
+        await self.to_proxy.send_multipart(msg, copy=False)
+        # set stopping flag to exit busy loop
+        self.stopping = True
 
     async def _generate(
         self,

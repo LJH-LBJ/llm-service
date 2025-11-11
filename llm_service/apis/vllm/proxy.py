@@ -28,6 +28,7 @@ from llm_service.protocol.protocol import (
     ResponseType,
     ServerType,
     ExitResponse,
+    ShutdownRequest,
 )
 from llm_service.request_stats import RequestStatsMonitor
 from llm_service.routing_logic import RandomRouter, RoutingInterface
@@ -453,16 +454,22 @@ class Proxy(EngineClient):
                     resp = metrics_decoder.decode(payload)
                 elif resp_type == ResponseType.EXIT:
                     resp = exit_decoder.decode(payload)
+                elif resp_type == ResponseType.SIGTERM:
+                    resp = decoder.decode(payload)
                 else:
                     raise RuntimeError(
                         f"Unknown response type from worker: {resp_type.decode()}"
                     )
+                if resp_type == ResponseType.SIGTERM:
+                    asyncio.create_task(
+                        self.handle_sigterm_from_worker(resp)
+                    )
 
-                if resp.request_id not in self.queues and\
-                    resp_type is not ResponseType.EXIT:
+                if resp.request_id not in self.queues:
                     if resp_type not in (
                         ResponseType.HEARTBEAT,
                         ResponseType.METRICS,
+                        ResponseType.SIGTERM,
                     ):
                         logger.warning(
                             "Request %s may have been aborted, ignore response.",
@@ -701,6 +708,27 @@ class Proxy(EngineClient):
             ) from e
         finally:
             self.queues.pop(request_id, None)
+    
+    async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
+        sockets = self.to_pd_sockets if req.server_type == ServerType.PD_INSTANCE else self.to_encode_sockets
+        id = [s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets].index(req.addr)
+        self.draining_pd.add(id) if req.server_type == ServerType.PD_INSTANCE else self.draining_encode.add(id)
+
+        if req.status == "DONE":
+            # remove from service discovery
+            if req.server_type == ServerType.PD_INSTANCE:
+                self.pd_service_discovery.remove_instance(id)
+            else:
+                self.encode_service_discovery.remove_instance(id)
+            logger.info("Instance %s id=%d has exited", req.server_type, id)
+        else:  # DRAINING
+            logger.info(
+                "Instance %s id=%d draining (reason=%s, in_flight=%d).",
+                req.server_type,
+                id,
+                req.reason,
+                req.in_flight,
+            )
 
     async def start_profile(self) -> None:
         raise NotImplementedError
