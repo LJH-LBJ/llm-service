@@ -650,7 +650,8 @@ class Proxy(EngineClient):
             if response.status == "DONE":
                 logger.info("Instance %s has exited", id)
             else:
-                logger.warning("Instance %s is still draining", id)
+                logger.warning("Instance %s is still draining, exit reason: %s",
+                "%d requests in flight", id, response.reason, response.in_flight)
 
         except Exception as e:
             raise RuntimeError(
