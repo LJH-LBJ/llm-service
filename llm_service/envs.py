@@ -11,6 +11,9 @@ _TRUE_VALUES = {"1", "true", "t", "y", "yes", "on"}
 environment_variables: dict[str, Callable[[], Any]] = {
     "TIMECOUNT_ENABLED": lambda: os.getenv("TIMECOUNT_ENABLED", "0").lower()
     in _TRUE_VALUES,
+    "WORKER_DRAINING_TIMEOUT": lambda: float(
+        os.getenv("WORKER_DRAINING_TIMEOUT", "2.0")
+    )
 }
 # --8<-- [end:env-vars-definition]
 

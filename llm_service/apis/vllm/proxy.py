@@ -609,6 +609,21 @@ class Proxy(EngineClient):
             self.queues.pop(request_id, None)
 
     async def exit_instance(self, server_type: ServerType, addr: str) -> None:
+        """
+        request the specified instance to exit gracefully:
+        1. add the instance to the draining set (stop routing new requests)
+        2. send EXIT request
+        3. wait for ExitResponse:
+              - DRAINING
+              - DONE to finish
+        4. alert/throw error on timeout
+        """
+
+        # lazy initialization
+        if self.output_handler is None:
+            self.output_handler = asyncio.create_task(
+                self._run_output_handler()
+            )
         if addr is None:
             logger.warning(
                 "Exit instance failed for %s, addr is None.", server_type
@@ -631,6 +646,7 @@ class Proxy(EngineClient):
         request = ExitRequest(request_id=request_id)
         q: asyncio.Queue = asyncio.Queue()
         self.queues[request_id] = q
+        exit_start = time.perf_counter()
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.EXIT, payload)
@@ -641,22 +657,52 @@ class Proxy(EngineClient):
             else:
                 self.draining_encode.add(id)
                 socket = self.to_encode_sockets[id]
+            
             await socket.send_multipart(msg, copy=False)
-            response = await q.get()
-            if not isinstance(response, ExitResponse):
-                raise ValueError(
-                    "Unexpected response type, expected ExitResponse"
-                )
-            if response.status == "DONE":
-                logger.info("Instance %s has exited", id)
-            else:
-                logger.warning("Instance %s is still draining, exit reason: %s, %d requests in flight",
-                               id, response.reason, response.in_flight)
+
+            while True:
+                # check for timeout
+                if (time.perf_counter() - exit_start) > llm_service_envs.WORKER_DRAINING_TIMEOUT:
+                    logger.warning(
+                        "Exit instance timeout for %s id=%d after %.2fs.",
+                        server_type,
+                        id,
+                        llm_service_envs.WORKER_DRAINING_TIMEOUT,
+                    )
+                    break
+                response = await q.get()
+                if isinstance(response, FailureResponse):
+                    raise RuntimeError(
+                        "Exit failed on instance %s id=%d: %s"
+                        % (server_type, id, response.error_message)
+                    )
+                if not isinstance(response, ExitResponse):
+                    raise ValueError(
+                        "Unexpected response type, expected ExitResponse"
+                    )
+                if response.status == "DONE":
+                    # remove from service discovery
+                    if server_type == ServerType.PD_INSTANCE:
+                        self.pd_service_discovery.remove_instance(id)
+                    else:
+                        self.encode_service_discovery.remove_instance(id)
+                    logger.info("Instance %s id=%d has exited", server_type, id)
+                    break
+                else:  # DRAINING
+                    logger.info(
+                        "Instance %s id=%d draining (reason=%s, in_flight=%d).",
+                        server_type,
+                        id,
+                        response.reason,
+                        response.in_flight,
+                    )
 
         except Exception as e:
             raise RuntimeError(
                 "Exit instance failed, exception: %s" % (e)
             ) from e
+        finally:
+            self.queues.pop(request_id, None)
 
     async def start_profile(self) -> None:
         raise NotImplementedError
