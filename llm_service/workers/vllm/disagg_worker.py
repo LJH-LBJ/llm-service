@@ -54,6 +54,7 @@ class DisaggWorker:
         self.to_proxy = self.ctx.socket(zmq.constants.PUSH)
         self.to_proxy.connect(self.proxy_addr)
         self.to_proxy.setsockopt(zmq.LINGER, 1000)
+        self.to_proxy.setsockopt(zmq.IMMEDIATE, 1)
 
         self.decoder_generate = msgspec.msgpack.Decoder(GenerationRequest)
         self.decoder_heartbeat = msgspec.msgpack.Decoder(HeartbeatRequest)
@@ -65,7 +66,7 @@ class DisaggWorker:
         self.running_requests: set[asyncio.Task] = set()
 
     def shutdown(self):
-        self.ctx.destroy()
+        self.ctx.term()
 
         for running_request in self.running_requests:
             running_request.cancel()
@@ -95,6 +96,9 @@ class DisaggWorker:
             try:
                 events = dict(await poller.poll(timeout=1000))
             except asyncio.CancelledError:
+                # When the worker is stopping, the poller may be cancelled.
+                # So we don't raise error. 
+                # Just catch the exception and exit the loop
                 if self.stopping:
                     logger.info("Poll cancelled due to worker shutdown.")
                     break
@@ -107,6 +111,8 @@ class DisaggWorker:
                 try:
                     req_type, req_data = await self.from_proxy.recv_multipart()
                 except zmq.ZMQError:
+                    # When the worker is stopping, the socket may be closed.
+                    # So we don't raise error.
                     if self.stopping:
                         logger.info("ZMQError received, shutting down DisaggWorker.")
                         break
@@ -212,7 +218,7 @@ class DisaggWorker:
         self.stopping = True
 
     # graceful shutdown on SIGTERM
-    async def _shutdown(self, reason: str) -> None:
+    async def _shutdown_handler(self, reason: str) -> None:
         if self.stopping:
             return
         self.stopping = True

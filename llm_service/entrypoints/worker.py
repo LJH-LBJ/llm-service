@@ -38,7 +38,7 @@ async def run(args, engine: EngineClient):
 async def do_SIGTERM_exit(worker: DisaggWorker, reason: str) -> None:
     if worker.stopping:
         return
-    await worker._shutdown(reason)
+    await worker._shutdown_handler(reason)
 
 def signal_handler(worker: DisaggWorker) -> None:
     asyncio.create_task(do_SIGTERM_exit(worker, "SIGTERM received"))
