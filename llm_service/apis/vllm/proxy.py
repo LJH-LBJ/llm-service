@@ -400,6 +400,7 @@ class Proxy(EngineClient):
         heartbeat_decoder = msgspec.msgpack.Decoder(HeartbeatResponse)
         metrics_decoder = msgspec.msgpack.Decoder(MetricsResponse)
         exit_decoder = msgspec.msgpack.Decoder(ExitResponse)
+        sigterm_decoder = msgspec.msgpack.Decoder(ShutdownRequest)
         try:
             socket = self.ctx.socket(zmq.constants.PULL)
             socket.bind(self.proxy_addr)
@@ -455,7 +456,7 @@ class Proxy(EngineClient):
                 elif resp_type == ResponseType.EXIT:
                     resp = exit_decoder.decode(payload)
                 elif resp_type == ResponseType.SIGTERM:
-                    resp = decoder.decode(payload)
+                    resp = sigterm_decoder.decode(payload)
                 else:
                     raise RuntimeError(
                         f"Unknown response type from worker: {resp_type.decode()}"
@@ -710,10 +711,9 @@ class Proxy(EngineClient):
             self.queues.pop(request_id, None)
     
     async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
+        # find instance id by addr
         sockets = self.to_pd_sockets if req.server_type == ServerType.PD_INSTANCE else self.to_encode_sockets
         id = [s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets].index(req.addr)
-        self.draining_pd.add(id) if req.server_type == ServerType.PD_INSTANCE else self.draining_encode.add(id)
-
         if req.status == "DONE":
             # remove from service discovery
             if req.server_type == ServerType.PD_INSTANCE:
@@ -722,6 +722,8 @@ class Proxy(EngineClient):
                 self.encode_service_discovery.remove_instance(id)
             logger.info("Instance %s id=%d has exited", req.server_type, id)
         else:  # DRAINING
+            # add instance id to draining set
+            self.draining_pd.add(id) if req.server_type == ServerType.PD_INSTANCE else self.draining_encode.add(id)
             logger.info(
                 "Instance %s id=%d draining (reason=%s, in_flight=%d).",
                 req.server_type,
