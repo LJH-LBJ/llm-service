@@ -36,6 +36,8 @@ async def run(args, engine: EngineClient):
         worker.shutdown()
 
 async def do_SIGTERM_exit(worker: DisaggWorker, reason: str) -> None:
+    if worker.stopping:
+        return
     await worker._shutdown(reason)
 
 def signal_handler(worker: DisaggWorker) -> None:

@@ -90,7 +90,15 @@ class DisaggWorker:
             self.running_requests.add(task)
             task.add_done_callback(self.running_requests.discard)
         while not self.stopping:
-            events = dict(await poller.poll(timeout=1000))
+            # poll for requests from proxy
+            # if worker is stopping, exit the loop
+            try:
+                events = dict(await poller.poll(timeout=1000))
+            except asyncio.CancelledError:
+                if self.stopping:
+                    logger.info("Poll cancelled due to worker shutdown.")
+                    break
+                raise
             if self.stopping:
                 break
             if not events:
@@ -99,8 +107,8 @@ class DisaggWorker:
                 try:
                     req_type, req_data = await self.from_proxy.recv_multipart()
                 except zmq.ZMQError:
-                    logger.info("ZMQError received, shutting down DisaggWorker.")
                     if self.stopping:
+                        logger.info("ZMQError received, shutting down DisaggWorker.")
                         break
                     raise
                 await self._handle_request(req_type, req_data)
