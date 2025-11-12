@@ -399,7 +399,6 @@ class Proxy(EngineClient):
         failure_decoder = msgspec.msgpack.Decoder(FailureResponse)
         heartbeat_decoder = msgspec.msgpack.Decoder(HeartbeatResponse)
         metrics_decoder = msgspec.msgpack.Decoder(MetricsResponse)
-        exit_decoder = msgspec.msgpack.Decoder(ExitResponse)
         sigterm_decoder = msgspec.msgpack.Decoder(ShutdownRequest)
         try:
             socket = self.ctx.socket(zmq.constants.PULL)
@@ -453,8 +452,6 @@ class Proxy(EngineClient):
                     resp = failure_decoder.decode(payload)
                 elif resp_type == ResponseType.METRICS:
                     resp = metrics_decoder.decode(payload)
-                elif resp_type == ResponseType.EXIT:
-                    resp = exit_decoder.decode(payload)
                 elif resp_type == ResponseType.SIGTERM:
                     resp = sigterm_decoder.decode(payload)
                 else:
@@ -653,9 +650,6 @@ class Proxy(EngineClient):
         # Create exit request
         request_id = str(uuid.uuid4())
         request = ExitRequest(request_id=request_id)
-        q: asyncio.Queue = asyncio.Queue()
-        self.queues[request_id] = q
-        exit_start = time.perf_counter()
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.EXIT, payload)
@@ -669,46 +663,10 @@ class Proxy(EngineClient):
             
             await socket.send_multipart(msg, copy=False)
 
-            while True:
-                # check for timeout
-                if (time.perf_counter() - exit_start) > llm_service_envs.WORKER_DRAINING_TIMEOUT:
-                    logger.warning(
-                        "Exit instance timeout for %s id=%d after %.2fs.",
-                        server_type,
-                        id,
-                        llm_service_envs.WORKER_DRAINING_TIMEOUT,
-                    )
-                    break
-                response = await q.get()
-                if isinstance(response, FailureResponse):
-                    raise response
-                if not isinstance(response, ExitResponse):
-                    raise ValueError(
-                        "Unexpected response type, expected ExitResponse"
-                    )
-                if response.status == "DONE":
-                    # remove from service discovery
-                    if server_type == ServerType.PD_INSTANCE:
-                        self.pd_service_discovery.remove_instance(id)
-                    else:
-                        self.encode_service_discovery.remove_instance(id)
-                    logger.info("Instance %s id=%d has exited", server_type, id)
-                    break
-                else:  # DRAINING
-                    logger.info(
-                        "Instance %s id=%d draining (reason=%s, in_flight=%d).",
-                        server_type,
-                        id,
-                        response.reason,
-                        response.in_flight,
-                    )
-
         except Exception as e:
             raise RuntimeError(
                 "Exit instance failed, exception: %s" % (e)
             ) from e
-        finally:
-            self.queues.pop(request_id, None)
     
     async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
         # lazy initialization
@@ -719,23 +677,21 @@ class Proxy(EngineClient):
         # find instance id by addr
         sockets = self.to_pd_sockets if req.server_type == ServerType.PD_INSTANCE else self.to_encode_sockets
         id = [s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets].index(req.addr)
-        if req.status == "DONE":
-            # remove from service discovery
-            if req.server_type == ServerType.PD_INSTANCE:
-                self.pd_service_discovery.remove_instance(id)
-            else:
-                self.encode_service_discovery.remove_instance(id)
-            logger.info("Instance %s id=%d has exited", req.server_type, id)
-        else:  # DRAINING
-            # add instance id to draining set
-            self.draining_pd.add(id) if req.server_type == ServerType.PD_INSTANCE else self.draining_encode.add(id)
-            logger.info(
-                "Instance %s id=%d draining (reason=%s, in_flight=%d).",
-                req.server_type,
-                id,
-                req.reason,
-                req.in_flight,
-            )
+        # add instance id to draining set
+        self.draining_pd.add(id) if req.server_type == ServerType.PD_INSTANCE else self.draining_encode.add(id)
+        logger.info(
+            "Instance %s id=%d draining (reason=%s, in_flight=%d).",
+            req.server_type,
+            id,
+            req.reason,
+            req.in_flight,
+        )
+        # remove from service discovery
+        if req.server_type == ServerType.PD_INSTANCE:
+            self.pd_service_discovery.remove_instance(id)
+        else:
+            self.encode_service_discovery.remove_instance(id)
+        logger.info("Instance %s id=%d has exited", req.server_type, id)
 
     async def start_profile(self) -> None:
         raise NotImplementedError

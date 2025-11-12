@@ -54,7 +54,6 @@ class DisaggWorker:
         self.to_proxy = self.ctx.socket(zmq.constants.PUSH)
         self.to_proxy.connect(self.proxy_addr)
         self.to_proxy.setsockopt(zmq.LINGER, 1000)
-        self.to_proxy.setsockopt(zmq.IMMEDIATE, 1)
 
         self.decoder_generate = msgspec.msgpack.Decoder(GenerationRequest)
         self.decoder_heartbeat = msgspec.msgpack.Decoder(HeartbeatRequest)
@@ -185,35 +184,9 @@ class DisaggWorker:
     async def _exit_handler(self, req: ExitRequest):
         if self.stopping:
             return
-        # send draining notice to proxy
-        msg = (
-            ResponseType.EXIT,
-            self.encoder.encode(
-                ExitResponse(
-                    request_id=req.request_id,
-                    status="DRAINING",
-                    in_flight=len(self.running_requests),
-                    reason=req.reason,
-                )
-            ),
-        )
-        await self.to_proxy.send_multipart(msg, copy=False)
         # wait for all running requests to finish
         if self.running_requests:
             await asyncio.gather(*list(self.running_requests), return_exceptions=True)
-        # send instance shutdown notice to proxy
-        msg = (
-            ResponseType.EXIT,
-            self.encoder.encode(
-                ExitResponse(
-                    request_id=req.request_id,
-                    status="DONE",
-                    in_flight=0,
-                    reason=req.reason,
-                )
-            ),
-        )
-        await self.to_proxy.send_multipart(msg, copy=False)
         # set stopping flag to exit busy loop
         self.stopping = True
 
@@ -235,7 +208,6 @@ class DisaggWorker:
                     request_id=request_id,
                     addr=self.worker_addr,
                     server_type=server_type,
-                    status="DRAINING",
                     in_flight=len(self.running_requests),
                     reason=reason
                 )
@@ -245,21 +217,6 @@ class DisaggWorker:
         # wait for all running requests to finish
         if self.running_requests:
             await asyncio.gather(*list(self.running_requests), return_exceptions=True)
-        # send instance shutdown notice to proxy
-        msg = (
-            ResponseType.SIGTERM,
-            self.encoder.encode(
-                ShutdownRequest(
-                    request_id=request_id,
-                    addr=self.worker_addr,
-                    server_type=server_type,
-                    status="DONE",
-                    in_flight=0,
-                    reason=reason
-                )
-            ),
-        )
-        await self.to_proxy.send_multipart(msg, copy=False)
         # closing the socket here to avoid waiting for proxy to detect worker exit
         try:
             self.from_proxy.close(linger=0)

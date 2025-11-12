@@ -39,7 +39,6 @@ class ResponseType:
     ENCODE = b"\x02"
     HEARTBEAT = b"\x03"
     METRICS = b"\x04"
-    EXIT = b"\x05"
     SIGTERM = b"\x06"
 
 
@@ -116,6 +115,5 @@ class ShutdownRequest(msgspec.Struct):
     request_id: str
     addr: str
     server_type: ServerType
-    status: str  # "DRAINING" | "DONE"
     in_flight: int
     reason: str
