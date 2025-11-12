@@ -711,6 +711,11 @@ class Proxy(EngineClient):
             self.queues.pop(request_id, None)
     
     async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
+        # lazy initialization
+        if self.output_handler is None:
+            self.output_handler = asyncio.create_task(
+                self._run_output_handler()
+            )
         # find instance id by addr
         sockets = self.to_pd_sockets if req.server_type == ServerType.PD_INSTANCE else self.to_encode_sockets
         id = [s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets].index(req.addr)

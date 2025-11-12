@@ -53,6 +53,7 @@ class DisaggWorker:
         self.from_proxy.bind(self.worker_addr)
         self.to_proxy = self.ctx.socket(zmq.constants.PUSH)
         self.to_proxy.connect(self.proxy_addr)
+        self.to_proxy.setsockopt(zmq.LINGER, 1000)
 
         self.decoder_generate = msgspec.msgpack.Decoder(GenerationRequest)
         self.decoder_heartbeat = msgspec.msgpack.Decoder(HeartbeatRequest)
@@ -88,12 +89,22 @@ class DisaggWorker:
             task = asyncio.create_task(_force_log())
             self.running_requests.add(task)
             task.add_done_callback(self.running_requests.discard)
-        while True:
-            req_type, req_data = await self.from_proxy.recv_multipart()
-            await self._handle_request(req_type, req_data)
+        while not self.stopping:
+            events = dict(await poller.poll(timeout=1000))
             if self.stopping:
                 break
-        self.shutdown()
+            if not events:
+                continue
+            if self.from_proxy in events:
+                try:
+                    req_type, req_data = await self.from_proxy.recv_multipart()
+                except zmq.ZMQError:
+                    logger.info("ZMQError received, shutting down DisaggWorker.")
+                    if self.stopping:
+                        break
+                    raise
+                await self._handle_request(req_type, req_data)
+        logger.info("Worker loop stopped.")
 
     async def _handle_request(self, req_type: bytes, req_data: bytes):
         if req_type == RequestType.ENCODE:
@@ -196,8 +207,9 @@ class DisaggWorker:
     async def _shutdown(self, reason: str) -> None:
         if self.stopping:
             return
+        self.stopping = True
         request_id=str(uuid.uuid4())
-        if "encoder" in self.proxy_addr:
+        if "encoder" in self.worker_addr:
             server_type=ServerType.E_INSTANCE
         else:
             server_type=ServerType.PD_INSTANCE
@@ -234,8 +246,11 @@ class DisaggWorker:
             ),
         )
         await self.to_proxy.send_multipart(msg, copy=False)
-        # set stopping flag to exit busy loop
-        self.stopping = True
+        # closing the socket here to avoid waiting for proxy to detect worker exit
+        try:
+            self.from_proxy.close(linger=0)
+        except Exception:
+            pass
 
     async def _generate(
         self,
