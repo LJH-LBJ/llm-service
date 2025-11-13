@@ -50,14 +50,6 @@ async def run(args, engine: EngineClient):
     finally:
         worker.shutdown()
 
-async def do_SIGTERM_exit(worker: DisaggWorker, reason: str) -> None:
-    if worker.stopping:
-        return
-    await worker._shutdown_handler(reason)
-
-def signal_handler(worker: DisaggWorker) -> None:
-    asyncio.create_task(do_SIGTERM_exit(worker, "SIGTERM received"))
-
 async def main(args) -> None:
     logger.info("Disaggregated Worker Server, vLLM ver. %s", VLLM_VERSION)
     logger.info("Args: %s", args)
