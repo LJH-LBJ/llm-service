@@ -26,7 +26,6 @@ from llm_service.protocol.protocol import (
     MetricsResponse,
     RequestType,
     ResponseType,
-    ExitResponse,
     ServerType,
     ShutdownRequest,
 )
@@ -61,7 +60,6 @@ class DisaggWorker:
         self.from_proxy.bind(self.worker_addr)
         self.to_proxy = self.ctx.socket(zmq.constants.PUSH)
         self.to_proxy.connect(self.proxy_addr)
-        self.to_proxy.setsockopt(zmq.LINGER, 1000)
         logger.info(
             f"Worker address: {self.worker_addr}, proxy_addr: {self.proxy_addr}"
         )
@@ -75,7 +73,8 @@ class DisaggWorker:
         self.running_requests: set[asyncio.Task] = set()
 
     def shutdown(self):
-        self.ctx.term()
+        self.to_proxy.close(linger=5000)
+        self.ctx.destroy()
 
         for running_request in self.running_requests:
             running_request.cancel()

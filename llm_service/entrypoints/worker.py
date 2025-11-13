@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the llm-service project
 
 import asyncio
+import time
 import uvloop
 from llm_service.protocol.protocol import ExitRequest
 from llm_service.stats_loggers import DisaggWorkerStatsLogger
@@ -21,6 +22,17 @@ logger = init_logger(__name__)
 async def run(args, engine: EngineClient):
     logger.info("Initializing disaggregated worker")
 
+    # Signal handler used for graceful termination.
+    # SystemExit exception is only raised once to allow this and worker
+    # processes to terminate without error
+    shutdown_requested = False
+    def signal_handler(*_):
+        nonlocal shutdown_requested
+        shutdown_requested = True
+        raise SystemExit()
+
+    signal.signal(signal.SIGTERM, signal_handler)
+
     worker = DisaggWorker(
         engine=engine,
         address=args.worker_addr,
@@ -28,11 +40,13 @@ async def run(args, engine: EngineClient):
         transfer_protocol=args.transfer_protocol,
     )
 
-    loop = asyncio.get_running_loop()
-    loop.add_signal_handler(signal.SIGTERM, signal_handler, worker)
-
     try:
         await worker.run_busy_loop()
+    except SystemExit:
+        await worker._shutdown_handler("SIGTERM received")
+        time.sleep(4)  # wait for cleanup
+        logger.debug("EngineCore exiting.")
+        raise
     finally:
         worker.shutdown()
 

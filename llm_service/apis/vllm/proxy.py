@@ -28,7 +28,6 @@ from llm_service.protocol.protocol import (
     RequestType,
     ResponseType,
     ServerType,
-    ExitResponse,
     ShutdownRequest,
 )
 from llm_service.request_stats import RequestStatsMonitor
