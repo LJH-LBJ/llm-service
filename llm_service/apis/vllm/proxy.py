@@ -466,6 +466,7 @@ class Proxy(EngineClient):
                     HeartbeatResponse,
                     FailureResponse,
                     MetricsResponse,
+                    ShutdownRequest,
                 ]
                 if resp_type in (ResponseType.GENERATION, ResponseType.ENCODE):
                     resp = decoder.decode(payload)
@@ -477,13 +478,12 @@ class Proxy(EngineClient):
                     resp = metrics_decoder.decode(payload)
                 elif resp_type == ResponseType.SIGTERM:
                     resp = sigterm_decoder.decode(payload)
+                    asyncio.create_task(
+                        self.handle_sigterm_from_worker(resp)
+                    )
                 else:
                     raise RuntimeError(
                         f"Unknown response type from worker: {resp_type.decode()}"
-                    )
-                if resp_type == ResponseType.SIGTERM:
-                    asyncio.create_task(
-                        self.handle_sigterm_from_worker(resp)
                     )
 
                 if resp.request_id not in self.queues:
@@ -642,10 +642,7 @@ class Proxy(EngineClient):
         request the specified instance to exit gracefully:
         1. add the instance to the draining set (stop routing new requests)
         2. send EXIT request
-        3. wait for ExitResponse:
-              - DRAINING
-              - DONE to finish
-        4. alert/throw error on timeout
+        3. the instance will remove itself from service discovery
         """
 
         # lazy initialization

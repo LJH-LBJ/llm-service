@@ -2,9 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the llm-service project
 
 import asyncio
-import time
 import uvloop
-from llm_service.protocol.protocol import ExitRequest
 from llm_service.stats_loggers import DisaggWorkerStatsLogger
 from llm_service.workers.vllm.disagg_worker import DisaggWorker
 from vllm.v1.engine.async_llm import AsyncLLM

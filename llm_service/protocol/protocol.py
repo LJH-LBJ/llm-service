@@ -104,13 +104,6 @@ class ExitRequest(msgspec.Struct):
     reason: str = "user_exit"
 
 
-class ExitResponse(msgspec.Struct):
-    request_id: str
-    status: str  # "DRAINING" | "DONE"
-    in_flight: int
-    reason: Optional[str] = None
-
-
 class ShutdownRequest(msgspec.Struct):
     request_id: str
     addr: str
