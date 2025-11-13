@@ -208,9 +208,9 @@ class DisaggWorker:
         self.stopping = True
         request_id=str(uuid.uuid4())
         if "encoder" in self.worker_addr:
-            server_type=ServerType.E_INSTANCE
+            server_type=ServerType.E_INSTANCE.name
         else:
-            server_type=ServerType.PD_INSTANCE
+            server_type=ServerType.PD_INSTANCE.name
         # send exit request to the proxy
         msg = (
             ResponseType.SIGTERM,
