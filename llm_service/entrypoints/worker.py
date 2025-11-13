@@ -25,13 +25,17 @@ async def run(args, engine: EngineClient):
     # Signal handler used for graceful termination.
     # SystemExit exception is only raised once to allow this and worker
     # processes to terminate without error
-    shutdown_requested = False
-    def signal_handler(*_):
-        nonlocal shutdown_requested
-        shutdown_requested = True
-        raise SystemExit()
+    loop = asyncio.get_event_loop()
+    exiting = asyncio.Event()
 
-    signal.signal(signal.SIGTERM, signal_handler)
+    async def do_graceful_exit():
+        if exiting.is_set():
+            return
+        exiting.set()
+        logger.info("Shutdown requested by signal.")
+        await worker._shutdown_handler("SIGTERM received")
+
+    loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(do_graceful_exit()))
 
     worker = DisaggWorker(
         engine=engine,
@@ -42,11 +46,6 @@ async def run(args, engine: EngineClient):
 
     try:
         await worker.run_busy_loop()
-    except SystemExit:
-        await worker._shutdown_handler("SIGTERM received")
-        time.sleep(4)  # wait for cleanup
-        logger.debug("EngineCore exiting.")
-        raise
     finally:
         worker.shutdown()
 
