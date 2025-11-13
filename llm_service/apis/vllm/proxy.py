@@ -180,8 +180,15 @@ class Proxy(EngineClient):
         """Filter out the draining requests from the candidates."""
         if server_type == ServerType.PD_INSTANCE:
             result = [iid for iid in candidates if iid not in self.draining_pd]
+            # clean up draining set
+            for iid in self.draining_pd:
+                if iid not in self.pd_service_discovery._instances:
+                    self.draining_pd.remove(iid)
         else:
             result = [iid for iid in candidates if iid not in self.draining_encode]
+            for iid in self.draining_encode:
+                if iid not in self.encode_service_discovery._instances:
+                    self.draining_encode.remove(iid)
         return result
 
     async def log_metrics(self) -> None:

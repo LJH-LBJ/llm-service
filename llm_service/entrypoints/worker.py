@@ -26,12 +26,12 @@ async def run(args, engine: EngineClient):
     # SystemExit exception is only raised once to allow this and worker
     # processes to terminate without error
     loop = asyncio.get_event_loop()
-    exiting = asyncio.Event()
+    exit_exiting = asyncio.Event()
 
     async def do_graceful_exit():
-        if exiting.is_set():
+        if exit_exiting.is_set():
             return
-        exiting.set()
+        exit_exiting.set()
         logger.info("Shutdown requested by signal.")
         await worker._shutdown_handler("SIGTERM received")
 
