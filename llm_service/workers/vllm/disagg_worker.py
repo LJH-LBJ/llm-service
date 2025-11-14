@@ -78,7 +78,8 @@ class DisaggWorker:
         self.running_requests: set[asyncio.Task] = set()
 
     def shutdown(self):
-        self.to_proxy.close(linger=5000)
+        for socket in self.to_proxy.values():
+            socket.close(linger=5000)
         self.ctx.destroy()
 
         for running_request in self.running_requests:
@@ -209,11 +210,11 @@ class DisaggWorker:
     async def _exit_handler(self, req: ExitRequest):
         if self.stopping:
             return
+        # set stopping flag to exit busy loop
+        self.stopping = True
         # wait for all running requests to finish
         if self.running_requests:
             await asyncio.gather(*list(self.running_requests), return_exceptions=True)
-        # set stopping flag to exit busy loop
-        self.stopping = True
 
     # graceful shutdown on SIGTERM
     async def _shutdown_handler(self, reason: str) -> None:
@@ -238,7 +239,8 @@ class DisaggWorker:
                 )
             ),
         )
-        await self.to_proxy.send_multipart(msg, copy=False)
+        for socket in self.to_proxy.values():
+            await socket.send_multipart(msg, copy=False)
         # wait for all running requests to finish
         if self.running_requests:
             await asyncio.gather(*list(self.running_requests), return_exceptions=True)
