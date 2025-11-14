@@ -655,16 +655,16 @@ class Proxy(EngineClient):
                 "Exit instance failed for %s, addr is None.", server_type
             )
             return
-        addr_ipc = f"ipc://{addr}"
+        worker_addr = f"{self.transfer_protocol}://{addr}"
         sockets = self.to_pd_sockets if server_type == ServerType.PD_INSTANCE else self.to_encode_sockets
         try:
             # find instance id by addr
-            id = [s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets].index(addr_ipc)
+            id = [s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets].index(worker_addr)
         except ValueError:
             logger.warning(
                 "Exit instance failed for %s, addr %s not found.",
                 server_type,
-                addr_ipc,
+                worker_addr,
             )
             return
         # Create exit request
