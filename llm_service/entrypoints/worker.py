@@ -33,7 +33,9 @@ async def run(args, engine: EngineClient):
         logger.info("Shutdown requested by signal.")
         await worker._shutdown_handler("SIGTERM received")
 
-    loop.add_signal_handler(signal.SIGTERM, lambda: asyncio.create_task(do_graceful_exit()))
+    loop.add_signal_handler(
+        signal.SIGTERM, lambda: asyncio.create_task(do_graceful_exit())
+    )
 
     worker = DisaggWorker(
         engine=engine,
@@ -46,6 +48,7 @@ async def run(args, engine: EngineClient):
         await worker.run_busy_loop()
     finally:
         worker.shutdown()
+
 
 async def main(args) -> None:
     logger.info("Disaggregated Worker Server, vLLM ver. %s", VLLM_VERSION)

@@ -74,7 +74,7 @@ class DisaggWorker:
         self.decoder_metrics = msgspec.msgpack.Decoder(MetricsRequest)
         self.decoder_exit = msgspec.msgpack.Decoder(ExitRequest)
         self.encoder = msgspec.msgpack.Encoder()
-        self.stopping = False # whether the worker is stopping
+        self.stopping = False  # whether the worker is stopping
         self.running_requests: set[asyncio.Task] = set()
 
     def shutdown(self):
@@ -113,7 +113,7 @@ class DisaggWorker:
                 events = dict(await poller.poll(timeout=1000))
             except asyncio.CancelledError:
                 # When the worker is stopping, the poller may be cancelled.
-                # So we don't raise error. 
+                # So we don't raise error.
                 # Just catch the exception and exit the loop
                 if self.stopping:
                     logger.info("Poll cancelled due to worker shutdown.")
@@ -130,7 +130,9 @@ class DisaggWorker:
                     # When the worker is stopping, the socket may be closed.
                     # So we don't raise error.
                     if self.stopping:
-                        logger.info("ZMQError received, shutting down DisaggWorker.")
+                        logger.info(
+                            "ZMQError received, shutting down DisaggWorker."
+                        )
                         break
                     raise
                 await self._handle_request(req_type, req_data)
@@ -214,18 +216,20 @@ class DisaggWorker:
         self.stopping = True
         # wait for all running requests to finish
         if self.running_requests:
-            await asyncio.gather(*list(self.running_requests), return_exceptions=True)
+            await asyncio.gather(
+                *list(self.running_requests), return_exceptions=True
+            )
 
     # graceful shutdown on SIGTERM
     async def _shutdown_handler(self, reason: str) -> None:
         if self.stopping:
             return
         self.stopping = True
-        request_id=str(uuid.uuid4())
+        request_id = str(uuid.uuid4())
         if "encoder" in self.worker_addr:
-            server_type=ServerType.E_INSTANCE
+            server_type = ServerType.E_INSTANCE
         else:
-            server_type=ServerType.PD_INSTANCE
+            server_type = ServerType.PD_INSTANCE
         # send exit request to the proxy
         msg = (
             ResponseType.SIGTERM,
@@ -235,7 +239,7 @@ class DisaggWorker:
                     addr=self.worker_addr,
                     server_type=server_type,
                     in_flight=len(self.running_requests),
-                    reason=reason
+                    reason=reason,
                 )
             ),
         )
@@ -243,7 +247,9 @@ class DisaggWorker:
             await socket.send_multipart(msg, copy=False)
         # wait for all running requests to finish
         if self.running_requests:
-            await asyncio.gather(*list(self.running_requests), return_exceptions=True)
+            await asyncio.gather(
+                *list(self.running_requests), return_exceptions=True
+            )
         # closing the socket here to avoid waiting for proxy to detect worker exit
         try:
             self.from_proxy.close(linger=0)

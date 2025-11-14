@@ -176,7 +176,9 @@ class Proxy(EngineClient):
         if self.transfer_protocol == "ipc" and os.path.exists(socket_path):
             os.remove(socket_path)
 
-    def _filter_draining_requests(self, candidates: list[int], server_type: ServerType) -> list[int]:
+    def _filter_draining_requests(
+        self, candidates: list[int], server_type: ServerType
+    ) -> list[int]:
         """Filter out the draining requests from the candidates."""
         result: list[int]
         if server_type == ServerType.PD_INSTANCE:
@@ -186,7 +188,9 @@ class Proxy(EngineClient):
                 if iid not in self.pd_service_discovery._instances:
                     self.draining_pd.remove(iid)
         else:
-            result = [iid for iid in candidates if iid not in self.draining_encode]
+            result = [
+                iid for iid in candidates if iid not in self.draining_encode
+            ]
             for iid in self.draining_encode:
                 if iid not in self.encode_service_discovery._instances:
                     self.draining_encode.remove(iid)
@@ -218,7 +222,9 @@ class Proxy(EngineClient):
         msg = (RequestType.ENCODE, payload)
         health_endpoints = self.encode_service_discovery.get_health_endpoints()
         # do not route to draining endpoints
-        health_endpoints = self._filter_draining_requests(health_endpoints, ServerType.E_INSTANCE)
+        health_endpoints = self._filter_draining_requests(
+            health_endpoints, ServerType.E_INSTANCE
+        )
         request_stats = self.encode_request_stats_monitor.get_request_stats()
         idx = self.encode_router.route_request(health_endpoints, request_stats)
         self.encode_request_stats_monitor.on_new_request(
@@ -270,7 +276,9 @@ class Proxy(EngineClient):
         msg = (RequestType.GENERATION, payload)
         health_endpoints = self.pd_service_discovery.get_health_endpoints()
         # do not route to draining endpoints
-        health_endpoints = self._filter_draining_requests(health_endpoints, ServerType.PD_INSTANCE)
+        health_endpoints = self._filter_draining_requests(
+            health_endpoints, ServerType.PD_INSTANCE
+        )
         request_stats = self.pd_request_stats_monitor.get_request_stats()
         idx = self.pd_router.route_request(health_endpoints, request_stats)
         self.pd_request_stats_monitor.on_new_request(
@@ -480,9 +488,7 @@ class Proxy(EngineClient):
                     resp = metrics_decoder.decode(payload)
                 elif resp_type == ResponseType.SIGTERM:
                     resp = sigterm_decoder.decode(payload)
-                    asyncio.create_task(
-                        self.handle_sigterm_from_worker(resp)
-                    )
+                    asyncio.create_task(self.handle_sigterm_from_worker(resp))
                 else:
                     raise RuntimeError(
                         f"Unknown response type from worker: {resp_type.decode()}"
@@ -662,10 +668,16 @@ class Proxy(EngineClient):
             )
             return
         worker_addr = f"{self.transfer_protocol}://{addr}"
-        sockets = self.to_pd_sockets if server_type == ServerType.PD_INSTANCE else self.to_encode_sockets
+        sockets = (
+            self.to_pd_sockets
+            if server_type == ServerType.PD_INSTANCE
+            else self.to_encode_sockets
+        )
         try:
             # find instance id by addr
-            id = [s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets].index(worker_addr)
+            id = [
+                s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets
+            ].index(worker_addr)
         except ValueError:
             logger.warning(
                 "Exit instance failed for %s, addr %s not found.",
@@ -686,7 +698,7 @@ class Proxy(EngineClient):
             else:
                 self.draining_encode.add(id)
                 socket = self.to_encode_sockets[id]
-            
+
             await socket.send_multipart(msg, copy=False)
             logger.info(
                 "Exit request sent to %s instance id=%d at addr=%s.",
@@ -699,7 +711,7 @@ class Proxy(EngineClient):
             raise RuntimeError(
                 "Exit instance failed, exception: %s" % (e)
             ) from e
-    
+
     async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
         # lazy initialization
         if self.output_handler is None:
@@ -707,10 +719,20 @@ class Proxy(EngineClient):
                 self._run_output_handler()
             )
         # find instance id by addr
-        sockets = self.to_pd_sockets if req.server_type == ServerType.PD_INSTANCE else self.to_encode_sockets
-        id = [s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets].index(req.addr)
+        sockets = (
+            self.to_pd_sockets
+            if req.server_type == ServerType.PD_INSTANCE
+            else self.to_encode_sockets
+        )
+        id = [s.getsockopt_string(zmq.LAST_ENDPOINT) for s in sockets].index(
+            req.addr
+        )
         # add instance id to draining set
-        self.draining_pd.add(id) if req.server_type == ServerType.PD_INSTANCE else self.draining_encode.add(id)
+        self.draining_pd.add(
+            id
+        ) if req.server_type == ServerType.PD_INSTANCE else self.draining_encode.add(
+            id
+        )
         logger.info(
             "Instance %s id=%d draining (reason=%s, in_flight=%d).",
             req.server_type,

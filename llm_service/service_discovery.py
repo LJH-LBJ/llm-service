@@ -154,5 +154,9 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
             del self._instances[iid]
             del self._succ_count[iid]
             del self._fail_count[iid]
-            logger.info("Instance %s %s removed from service discovery.", self.server_type, iid)
+            logger.info(
+                "Instance %s %s removed from service discovery.",
+                self.server_type,
+                iid,
+            )
             self._update_health_status()
