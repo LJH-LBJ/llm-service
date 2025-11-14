@@ -18,6 +18,8 @@ from vllm.outputs import RequestOutput
 class ServerType(Enum):
     E_INSTANCE = auto()
     PD_INSTANCE = auto()
+    P_INSTANCE = auto()
+    D_INSTANCE = auto()
 
 
 class RequestType:
@@ -26,6 +28,7 @@ class RequestType:
     ENCODE = b"\x02"
     HEARTBEAT = b"\x03"
     METRICS = b"\x04"
+    PREFILL = b"\x05"
 
 
 class PDAbortRequest(msgspec.Struct):
@@ -38,6 +41,7 @@ class ResponseType:
     ENCODE = b"\x02"
     HEARTBEAT = b"\x03"
     METRICS = b"\x04"
+    PREFILL = b"\x05"
 
 
 class GenerationResponse(msgspec.Struct):
