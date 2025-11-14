@@ -178,6 +178,7 @@ class Proxy(EngineClient):
 
     def _filter_draining_requests(self, candidates: list[int], server_type: ServerType) -> list[int]:
         """Filter out the draining requests from the candidates."""
+        result: list[int]
         if server_type == ServerType.PD_INSTANCE:
             result = [iid for iid in candidates if iid not in self.draining_pd]
             # clean up draining set
@@ -687,6 +688,12 @@ class Proxy(EngineClient):
                 socket = self.to_encode_sockets[id]
             
             await socket.send_multipart(msg, copy=False)
+            logger.info(
+                "Exit request sent to %s instance id=%d at addr=%s.",
+                server_type,
+                id,
+                addr,
+            )
 
         except Exception as e:
             raise RuntimeError(
