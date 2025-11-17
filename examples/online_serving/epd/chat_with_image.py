@@ -23,9 +23,21 @@ parser.add_argument(
 )
 parser.add_argument(
     "--pd-addr-list",
-    required=True,
+    required=False,
     nargs="+",
     help="List of pd addresses",
+)
+parser.add_argument(
+    "--p-addr-list",
+    required=False,
+    nargs="+",
+    help="List of prefill addresses",
+)
+parser.add_argument(
+    "--d-addr-list",
+    required=False,
+    nargs="+",
+    help="List of decode addresses",
 )
 parser.add_argument(
     "--transfer-protocol",
@@ -64,6 +76,8 @@ async def main():
         proxy_addr=args.proxy_addr,
         encode_addr_list=args.encode_addr_list,
         pd_addr_list=args.pd_addr_list,
+        p_addr_list=args.p_addr_list,
+        d_addr_list=args.d_addr_list,
         model_name=args.model_name,
         enable_health_monitor=False,
         transfer_protocol=args.transfer_protocol,

@@ -19,6 +19,26 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "TRANSFER_PROTOCOL": env_with_choices(
         "TRANSFER_PROTOCOL", None, ["tcp", "ipc"]
     ),
+    "LM_SERVICE_PREFILL_ROUTER": env_with_choices(
+        "LM_SERVICE_PREFILL_ROUTER",
+        "RandomRouter",
+        ["RandomRouter", "RoundRobinRouter", "LeastInFlightRouter"],
+    ),
+    "LM_SERVICE_DECODE_ROUTER": env_with_choices(
+        "LM_SERVICE_DECODE_ROUTER",
+        "RandomRouter",
+        ["RandomRouter", "RoundRobinRouter", "LeastInFlightRouter"],
+    ),
+    "LM_SERVICE_PD_ROUTER": env_with_choices(
+        "LM_SERVICE_PD_ROUTER",
+        "RandomRouter",
+        ["RandomRouter", "RoundRobinRouter", "LeastInFlightRouter"],
+    ),
+    "LM_SERVICE_ENCODE_ROUTER": env_with_choices(
+        "LM_SERVICE_ENCODE_ROUTER",
+        "RandomRouter",
+        ["RandomRouter", "RoundRobinRouter", "LeastInFlightRouter"],
+    ),
 }
 
 # --8<-- [end:env-vars-definition]
