@@ -26,7 +26,6 @@ from llm_service.protocol.protocol import (
     MetricsResponse,
     RequestType,
     ResponseType,
-    ServerType,
     ShutdownRequest,
 )
 from vllm.engine.protocol import EngineClient
@@ -237,10 +236,6 @@ class DisaggWorker:
             return
         self.stopping = True
         request_id = str(uuid.uuid4())
-        if "encoder" in self.worker_addr:
-            server_type = ServerType.E_INSTANCE
-        else:
-            server_type = ServerType.PD_INSTANCE
         # send exit request to the proxy
         msg = (
             ResponseType.SIGTERM,
@@ -248,7 +243,6 @@ class DisaggWorker:
                 ShutdownRequest(
                     request_id=request_id,
                     addr=self.worker_addr,
-                    server_type=server_type,
                     in_flight=len(self.running_requests),
                     reason=reason,
                 )

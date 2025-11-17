@@ -28,7 +28,6 @@ class RequestType:
     ENCODE = b"\x02"
     HEARTBEAT = b"\x03"
     METRICS = b"\x04"
-
     PREFILL = b"\x05"
     EXIT = b"\x06"
 
@@ -115,6 +114,5 @@ class ExitRequest(msgspec.Struct):
 class ShutdownRequest(msgspec.Struct):
     request_id: str
     addr: str
-    server_type: ServerType
     in_flight: int
     reason: str

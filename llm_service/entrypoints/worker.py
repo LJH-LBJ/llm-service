@@ -3,6 +3,7 @@
 
 import asyncio
 import uvloop
+import signal
 from llm_service.stats_loggers import DisaggWorkerStatsLogger
 from llm_service.workers.vllm.disagg_worker import DisaggWorker
 from vllm.v1.engine.async_llm import AsyncLLM
@@ -11,7 +12,6 @@ from vllm.engine.protocol import EngineClient
 from vllm.utils import FlexibleArgumentParser
 from vllm.version import __version__ as VLLM_VERSION
 import llm_service.envs as llm_service_envs
-import signal
 from llm_service.logger_utils import init_logger
 
 logger = init_logger(__name__)
