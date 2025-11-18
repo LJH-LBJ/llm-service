@@ -909,14 +909,14 @@ class Proxy(EngineClient):
         """wait for response from queue with timeout handling."""
         try:
             resp = await asyncio.wait_for(
-                q.get(), timeout=llm_service_envs.REQUEST_TIMEOUT_SECONDS
+                q.get(), timeout=lm_service_envs.REQUEST_TIMEOUT_SECONDS
             )
             return resp
         except asyncio.TimeoutError:
             self.queues.pop(request_id, None)
             return RuntimeError(
                 f"Request {request_id} timed out "
-                f"after {llm_service_envs.REQUEST_TIMEOUT_SECONDS}s "
+                f"after {lm_service_envs.REQUEST_TIMEOUT_SECONDS}s "
                 f"without worker response."
             )
 
