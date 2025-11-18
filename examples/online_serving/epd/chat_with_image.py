@@ -107,15 +107,20 @@ async def main():
             await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
             asyncio.create_task(p.log_metrics())
         # test for exit_instance
-        exit_task = asyncio.create_task(
-            asyncio.wait_for(
-                p.exit_instance(
-                    ServerType.PD_INSTANCE, addr="/tmp/prefill_decode_0"
-                ),
-                timeout=llm_service_envs.WORKER_DRAINING_TIMEOUT,
+        pd_num = len(args.pd_addr_list)
+        exit_tasks = []
+        for i in range(pd_num):
+            exit_task = asyncio.create_task(
+                asyncio.wait_for(
+                    p.exit_instance(
+                        ServerType.PD_INSTANCE, addr=args.pd_addr_list[i]
+                    ),
+                    timeout=llm_service_envs.WORKER_DRAINING_TIMEOUT,
+                )
             )
-        )
-        await exit_task
+            exit_tasks.append(exit_task)
+        if exit_tasks:
+            await asyncio.gather(*exit_tasks)
     finally:
         p.shutdown()
 
