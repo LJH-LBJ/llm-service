@@ -333,9 +333,7 @@ class Proxy(EngineClient):
             if lm_service_envs.TIMECOUNT_ENABLED:
                 proxy_to_encode_time_start = time.perf_counter()
             await socket.send_multipart(msg, copy=False)
-            response = await self._await_with_timeout(
-                    request.request_id, q
-            )
+            response = await self._await_with_timeout(request.request_id, q)
             if (
                 lm_service_envs.TIMECOUNT_ENABLED
                 and isinstance(response, GenerationResponse)
@@ -388,9 +386,7 @@ class Proxy(EngineClient):
             await socket.send_multipart(msg, copy=False)
             finished = False
             while not finished:
-                response = await self._await_with_timeout(
-                    request.request_id, q
-                )
+                response = await self._await_with_timeout(request.request_id, q)
                 if isinstance(response, Exception):
                     raise response
                 if (
@@ -441,9 +437,7 @@ class Proxy(EngineClient):
             if lm_service_envs.TIMECOUNT_ENABLED:
                 proxy_to_p_time_start = time.perf_counter()
             await socket.send_multipart(msg, copy=False)
-            response = await self._await_with_timeout(
-                    request.request_id, q
-            )
+            response = await self._await_with_timeout(request.request_id, q)
             if (
                 lm_service_envs.TIMECOUNT_ENABLED
                 and isinstance(response, GenerationResponse)
@@ -494,9 +488,7 @@ class Proxy(EngineClient):
             await socket.send_multipart(msg, copy=False)
             finished = False
             while not finished:
-                response = await self._await_with_timeout(
-                    request.request_id, q
-                )
+                response = await self._await_with_timeout(request.request_id, q)
                 if isinstance(response, Exception):
                     raise response
                 if (
