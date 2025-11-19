@@ -146,9 +146,11 @@ class Proxy(EngineClient):
             self.pd_router = (
                 ROUTER_MAP.get(lm_service_envs.LM_SERVICE_PD_ROUTER) or router
             )()
+            # [enginne_id: transfer_count]
             self.proxy_to_pd_time_count: defaultdict[int, int] = defaultdict(
                 int
             )
+            # [enginne_id: transfer_total_time]
             self.proxy_to_pd_time_total: defaultdict[int, float] = defaultdict(
                 float
             )
@@ -232,7 +234,10 @@ class Proxy(EngineClient):
             self.proxy_to_d_time_total: defaultdict[int, float] = defaultdict(
                 float
             )
-
+        # record proxy ttft
+        self.proxy_ttft_count: int = 0
+        self.proxy_ttft_total: float = 0.0
+        
         self.to_encode_sockets = []
         for addr in self.encode_addr_list:
             socket = self.ctx.socket(zmq.constants.PUSH)
@@ -582,6 +587,8 @@ class Proxy(EngineClient):
         )
 
         try:
+            proxy_ttft_start = time.perf_counter()
+            ttft_recorded_flag = False
             # need to validate to avoid decode failed later
             req_dict = msgspec.to_builtins(request)
             request = msgspec.convert(req_dict, GenerationRequest, strict=True)
@@ -595,15 +602,36 @@ class Proxy(EngineClient):
             if self.is_pd_merged:
                 async for pd_response in self._run_pd(request, q):
                     yield self._to_request_output(pd_response)
+                    ttft_recorded_flag = self.cal_proxy_ttft(
+                        ttft_recorded_flag,
+                        proxy_ttft_start,
+                        pd_response,
+                    )
             else:
                 await self._run_prefill(request, q)
                 async for d_response in self._run_decode(request, q):
                     yield self._to_request_output(d_response)
+                    ttft_recorded_flag = self.cal_proxy_ttft(
+                        ttft_recorded_flag,
+                        proxy_ttft_start,
+                        d_response,
+                    )
 
         except msgspec.ValidationError as e:
             raise RuntimeError(f"Invalid Parameters: {e}.") from e
         finally:
             self.queues.pop(request_id, None)
+    
+    def cal_proxy_ttft(self, ttft_recorded_flag: bool, start: float, resp) -> bool:
+        if ttft_recorded_flag:
+            return True
+        token_ids = getattr(resp, "token_ids", None)
+        has_first_token = token_ids and len(token_ids) > 0
+        if not has_first_token:
+            return False
+        self.proxy_ttft_count += 1
+        self.proxy_ttft_total += time.perf_counter() - start
+        return True
 
     async def abort_requests_from_unhealth_endpoints(
         self, server_type, unhealth_endpoints, request_stats_monitor
@@ -872,11 +900,17 @@ class Proxy(EngineClient):
                     if self.proxy_to_encode_time_count[id] > 0
                     else 0.0
                 )
+                proxy_ttft_avg = (
+                    self.proxy_ttft_total / self.proxy_ttft_count
+                    if self.proxy_ttft_count > 0
+                    else 0.0
+                )
                 for engine_id in response.metrics:
                     response.metrics[engine_id].update(
                         {
                             "proxy_to_pd_time_avg": proxy2pd_avg,
                             "proxy_to_encode_time_avg": proxy2encode_avg,
+                            "proxy_ttft_avg": proxy_ttft_avg,
                         }
                     )
                 return response.metrics

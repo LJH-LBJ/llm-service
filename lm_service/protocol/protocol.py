@@ -101,4 +101,5 @@ class MetricsRequest(msgspec.Struct):
 
 class MetricsResponse(msgspec.Struct):
     request_id: str
+    # [<engine_id>: <metric_name>: <metric_value>]
     metrics: Optional[dict[int, dict[str, Union[int, float]]]]
