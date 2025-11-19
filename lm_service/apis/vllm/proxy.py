@@ -902,7 +902,7 @@ class Proxy(EngineClient):
         try:
             resp = await asyncio.wait_for(
                 q.get(),
-                timeout=lm_service_envs.LM_SERVICE_REQUEST_TIMEOUT_SECONDS
+                timeout=lm_service_envs.LM_SERVICE_REQUEST_TIMEOUT_SECONDS,
             )
             return resp
         except asyncio.TimeoutError:
