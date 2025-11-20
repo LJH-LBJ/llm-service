@@ -13,8 +13,7 @@ import numpy as np
 import zmq
 import zmq.asyncio
 from vllm.config import ModelConfig, VllmConfig
-from llm_service.protocol.protocol import (
-    ExitRequest,
+from lm_service.protocol.protocol import ExitRequest
 from vllm.engine.protocol import EngineClient
 from vllm.inputs.data import PromptType
 from vllm.inputs.preprocess import InputPreprocessor

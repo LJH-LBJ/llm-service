@@ -5,13 +5,14 @@ import asyncio
 import uuid
 import json
 
-from llm_service.protocol.protocol import ServerType
+
 import numpy as np
 from PIL import Image
 
 from vllm import SamplingParams
-from lm_service.apis.vllm.proxy import Proxy
 import vllm.envs as envs
+from lm_service.apis.vllm.proxy import Proxy
+from lm_service.protocol.protocol import ServerType
 import lm_service.envs as lm_service_envs
 
 PROXY_NUM = 1
@@ -110,7 +111,7 @@ async def run_single_proxy(proxy_addr):
                 p.exit_instance(
                     ServerType.PD_INSTANCE, addr="/tmp/prefill_decode_0"
                 ),
-                timeout=llm_service_envs.WORKER_DRAINING_TIMEOUT,
+                timeout=lm_service_envs.WORKER_DRAINING_TIMEOUT,
             )
         )
         await exit_task

@@ -17,9 +17,8 @@ from vllm.utils import get_ip, get_open_port
 import vllm.envs as envs
 from vllm.config import ECTransferConfig, KVTransferConfig
 
-from llm_service.stats_loggers import DisaggWorkerStatsLogger
-from llm_service.protocol.protocol import (
-    ExitRequest,
+from lm_service.stats_loggers import DisaggWorkerStatsLogger
+from lm_service.protocol.protocol import ExitRequest
 from lm_service.stats_loggers import DisaggWorkerStatsLogger
 from lm_service.protocol.protocol import (
     FailureResponse,
