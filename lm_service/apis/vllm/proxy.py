@@ -855,7 +855,7 @@ class Proxy(EngineClient):
             elif server_type == ServerType.E_INSTANCE:
                 socket = self.to_encode_sockets[addr]
 
-            await socket.send_multipart(msg, copy=False) # type: ignore
+            await socket.send_multipart(msg, copy=False)
             response = await q.get()
             # calculate proxy to pd/encode time
             if (
@@ -866,10 +866,8 @@ class Proxy(EngineClient):
                 # add to metrics
                 proxy_ttft_avg = 0.0
                 if server_type == ServerType.E_INSTANCE:
-                    proxy2instance_avg = (
-                        self.encoder_metrics_logger.get_avg_proxy_to_instance_time(
-                            addr
-                        )
+                    proxy2instance_avg = self.encoder_metrics_logger.get_avg_proxy_to_instance_time(
+                        addr
                     )
                 elif server_type == ServerType.PD_INSTANCE:
                     proxy2instance_avg = (
@@ -877,9 +875,7 @@ class Proxy(EngineClient):
                             addr
                         )
                     )
-                    proxy_ttft_avg = (
-                        self.pd_metrics_logger.get_avg_proxy_ttft()
-                    )
+                    proxy_ttft_avg = self.pd_metrics_logger.get_avg_proxy_ttft()
                 elif server_type == ServerType.P_INSTANCE:
                     proxy2instance_avg = (
                         self.p_metrics_logger.get_avg_proxy_to_instance_time(
@@ -892,14 +888,12 @@ class Proxy(EngineClient):
                             addr
                         )
                     )
-                    proxy_ttft_avg = (
-                        self.d_metrics_logger.get_avg_proxy_ttft()
-                    )
+                    proxy_ttft_avg = self.d_metrics_logger.get_avg_proxy_ttft()
                 for engine_id in response.metrics:
                     response.metrics[engine_id].update(
                         {
-                            "proxy_to_instance_time_avg": proxy2instance_avg, # type: ignore
-                            "proxy_ttft_avg": proxy_ttft_avg, # type: ignore
+                            "proxy_to_instance_time_avg": proxy2instance_avg,  # type: ignore
+                            "proxy_ttft_avg": proxy_ttft_avg,  # type: ignore
                         }
                     )
 
