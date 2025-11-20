@@ -6,7 +6,6 @@ import json
 
 import asyncio
 import uvloop
-import signal
 from vllm.v1.engine.async_llm import AsyncLLM
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.engine.protocol import EngineClient

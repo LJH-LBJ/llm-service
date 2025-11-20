@@ -910,8 +910,11 @@ class Proxy(EngineClient):
                 "Exit instance failed for %s, addr is None.", server_type
             )
             return
-        worker_addr = f"{self.transfer_protocol}://{addr}" \
-            if not addr.startswith(self.transfer_protocol) else addr
+        worker_addr = (
+            f"{self.transfer_protocol}://{addr}"
+            if not addr.startswith(self.transfer_protocol)
+            else addr
+        )
         sockets = self._get_socket_from_server_type(server_type)
         socket = sockets.get(worker_addr, None)
         if socket is None:
@@ -939,6 +942,11 @@ class Proxy(EngineClient):
                 "Exit instance failed, exception: %s" % (e)
             ) from e
         sockets.pop(worker_addr, None)  # stop routing new requests
+        node_key = (
+            f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.name}"
+        )
+        if self.metastore_client:
+            self.metastore_client.delete_metadata(node_key, addr)
 
     async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
         # lazy initialization

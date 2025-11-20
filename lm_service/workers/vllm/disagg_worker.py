@@ -19,7 +19,6 @@ from vllm.config import ECTransferConfig, KVTransferConfig
 
 from lm_service.stats_loggers import DisaggWorkerStatsLogger
 from lm_service.protocol.protocol import ExitRequest
-from lm_service.stats_loggers import DisaggWorkerStatsLogger
 from lm_service.protocol.protocol import (
     FailureResponse,
     GenerationRequest,
