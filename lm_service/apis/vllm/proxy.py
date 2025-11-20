@@ -874,13 +874,7 @@ class Proxy(EngineClient):
                         proxy2pd_avg = self.pd_metrics_logger.get_avg_proxy_to_instance_time(
                             addr
                         )
-                        proxy_ttft_avg = (
-                        self.pd_metrics_logger.proxy_ttft_total
-                        * 1000.0
-                        / self.pd_metrics_logger.proxy_ttft_count
-                        if self.pd_metrics_logger.proxy_ttft_count > 0
-                        else 0.0
-                        )
+                        proxy_ttft_avg = self.pd_metrics_logger.get_avg_proxy_ttft()
                         response.metrics[engine_id].update(
                             {
                                 "proxy_to_encode_time_avg": proxy2encode_avg,
@@ -895,21 +889,15 @@ class Proxy(EngineClient):
                         proxy2d_avg = self.d_metrics_logger.get_avg_proxy_to_instance_time(
                             addr
                         )
-                        proxy_ttft_avg = (
-                            self.d_metrics_logger.proxy_ttft_total
-                            * 1000.0
-                            / self.d_metrics_logger.proxy_ttft_count
-                            if self.d_metrics_logger.proxy_ttft_count > 0
-                            else 0.0
-                        )
+                        proxy_ttft_avg = self.d_metrics_logger.get_avg_proxy_ttft()
                         response.metrics[engine_id].update(
-                                {
-                                    "proxy_to_encode_time_avg": proxy2encode_avg,
-                                    "proxy_to_p_time_avg": proxy2p_avg,
-                                    "proxy_to_d_time_avg": proxy2d_avg,
+                            {
+                                "proxy_to_encode_time_avg": proxy2encode_avg,
+                                "proxy_to_p_time_avg": proxy2p_avg,
+                                "proxy_to_d_time_avg": proxy2d_avg,
                                 "proxy_ttft_avg": proxy_ttft_avg,
-                                }
-                            )
+                            }
+                        )
 
                 return response.metrics
             elif isinstance(response, Exception):

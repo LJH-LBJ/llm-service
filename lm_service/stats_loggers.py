@@ -244,6 +244,15 @@ class MetricsReporter:
             else 0.0
         )
 
+    def get_avg_proxy_ttft(self) -> float:
+        return (
+            self.proxy_ttft_total
+            * 1000.0
+            / self.proxy_ttft_count
+            if self.proxy_ttft_count > 0
+            else 0.0
+        )
+
     def add_proxy_to_instance_time(self, work_addr: str, time: float):
         self.proxy_to_instance_time_count[work_addr] += 1
         self.proxy_to_instance_time_total[work_addr] += time
