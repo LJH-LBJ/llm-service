@@ -246,9 +246,7 @@ class MetricsReporter:
 
     def get_avg_proxy_ttft(self) -> float:
         return (
-            self.proxy_ttft_total
-            * 1000.0
-            / self.proxy_ttft_count
+            self.proxy_ttft_total * 1000.0 / self.proxy_ttft_count
             if self.proxy_ttft_count > 0
             else 0.0
         )
