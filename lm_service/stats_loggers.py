@@ -260,8 +260,8 @@ class MetricsReporter:
     ) -> bool:
         if ttft_recorded_flag:
             return True
-        token_ids = getattr(resp, "token_ids", None)
-        has_first_token = token_ids and len(token_ids) > 0
+        token_ids: Optional[list[int]] = getattr(resp, "token_ids", None)
+        has_first_token: bool = token_ids is not None and len(token_ids) > 0
         if not has_first_token:
             return False
         self.proxy_ttft_count += 1
