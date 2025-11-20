@@ -237,7 +237,7 @@ class Proxy(EngineClient):
         # record proxy ttft
         self.proxy_ttft_count: int = 0
         self.proxy_ttft_total: float = 0.0
-        
+
         self.to_encode_sockets = []
         for addr in self.encode_addr_list:
             socket = self.ctx.socket(zmq.constants.PUSH)
@@ -621,8 +621,10 @@ class Proxy(EngineClient):
             raise RuntimeError(f"Invalid Parameters: {e}.") from e
         finally:
             self.queues.pop(request_id, None)
-    
-    def cal_proxy_ttft(self, ttft_recorded_flag: bool, start: float, resp) -> bool:
+
+    def cal_proxy_ttft(
+        self, ttft_recorded_flag: bool, start: float, resp
+    ) -> bool:
         if ttft_recorded_flag:
             return True
         token_ids = getattr(resp, "token_ids", None)
@@ -889,13 +891,15 @@ class Proxy(EngineClient):
                 # calculate proxy to pd/encode time average
                 # add to metrics
                 proxy2pd_avg = (
-                    self.proxy_to_pd_time_total[id] * 1000
+                    self.proxy_to_pd_time_total[id]
+                    * 1000
                     / self.proxy_to_pd_time_count[id]
                     if self.proxy_to_pd_time_count[id] > 0
                     else 0.0
                 )
                 proxy2encode_avg = (
-                    self.proxy_to_encode_time_total[id] * 1000
+                    self.proxy_to_encode_time_total[id]
+                    * 1000
                     / self.proxy_to_encode_time_count[id]
                     if self.proxy_to_encode_time_count[id] > 0
                     else 0.0
