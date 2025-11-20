@@ -1,11 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: Copyright contributors to the llm-service project
+# SPDX-FileCopyrightText: Copyright contributors to the LM-Service project
 
 from enum import Enum, auto
 from typing import Any, Optional, Union
 
 import msgspec
-
 from vllm import SamplingParams
 from vllm.outputs import RequestOutput
 
@@ -20,6 +19,7 @@ class ServerType(Enum):
     PD_INSTANCE = auto()
     P_INSTANCE = auto()
     D_INSTANCE = auto()
+    PROXY = auto()
 
 
 class RequestType:

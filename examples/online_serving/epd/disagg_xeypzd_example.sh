@@ -41,7 +41,7 @@ function start_encoder() {
     local proxy_address=$3
     local log_file=$4
 
-    VLLM_USE_V1=1 ASCEND_RT_VISIBLE_DEVICES=$dev_id python -m llm_service.entrypoints.worker \
+    VLLM_USE_V1=1 ASCEND_RT_VISIBLE_DEVICES=$dev_id python -m lm_service.entrypoints.worker \
         --proxy-addr $proxy_address \
         --worker-addr $address \
         --model $MODEL \
@@ -66,7 +66,7 @@ function start_prefill() {
     local proxy_address=$3
     local log_file=$4
 
-    VLLM_USE_V1=1 ASCEND_RT_VISIBLE_DEVICES=$dev_id python -m llm_service.entrypoints.worker \
+    VLLM_USE_V1=1 ASCEND_RT_VISIBLE_DEVICES=$dev_id python -m lm_service.entrypoints.worker \
         --proxy-addr $proxy_address \
         --worker-addr $address \
         --model $MODEL \
@@ -86,7 +86,7 @@ function start_prefill() {
             "kv_role": "kv_producer",
             "kv_parallel_size": 1,
             "kv_port": "20001",
-            "engine_id": 0,
+            "engine_id": "0",
             "kv_rank": 0,
             "kv_connector_module_path": "vllm_ascend.distributed.mooncake_connector",
             "kv_connector_extra_config": {
@@ -110,7 +110,7 @@ function start_decoder() {
     local proxy_address=$3
     local log_file=$4
 
-    VLLM_USE_V1=1 ASCEND_RT_VISIBLE_DEVICES=$dev_id python -m llm_service.entrypoints.worker \
+    VLLM_USE_V1=1 ASCEND_RT_VISIBLE_DEVICES=$dev_id python -m lm_service.entrypoints.worker \
         --proxy-addr $proxy_address \
         --worker-addr $address \
         --model $MODEL \
@@ -123,7 +123,7 @@ function start_decoder() {
             "kv_role": "kv_consumer",
             "kv_parallel_size": 1,
             "kv_port": "20002",
-            "engine_id": 0,
+            "engine_id": "0",
             "kv_rank": 0,
             "kv_connector_module_path": "vllm_ascend.distributed.mooncake_connector",
             "kv_connector_extra_config": {

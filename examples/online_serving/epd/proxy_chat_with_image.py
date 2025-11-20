@@ -1,33 +1,34 @@
 # SPDX-License-Identifier: Apache-2.0
-# SPDX-FileCopyrightText: Copyright contributors to the llm-service project
+# SPDX-FileCopyrightText: Copyright contributors to the LM-Service project
 import argparse
 import asyncio
 import uuid
+import json
 
 from llm_service.protocol.protocol import ServerType
 import numpy as np
 from PIL import Image
 
 from vllm import SamplingParams
-from llm_service.apis.vllm.proxy import Proxy
+from lm_service.apis.vllm.proxy import Proxy
 import vllm.envs as envs
-import llm_service.envs as llm_service_envs
+import lm_service.envs as lm_service_envs
 
 PROXY_NUM = 1
 PROXY_PORT_BASE = 38000
 TRANSFER_PROTOCOL = "ipc"
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--proxy-addr", required=True, help="Proxy address")
+parser.add_argument("--proxy-addr", required=False, help="Proxy address")
 parser.add_argument(
     "--encode-addr-list",
-    required=True,
+    required=False,
     nargs="+",
     help="List of encode addresses",
 )
 parser.add_argument(
     "--pd-addr-list",
-    required=True,
+    required=False,
     nargs="+",
     help="List of pd addresses",
 )
@@ -37,6 +38,12 @@ parser.add_argument(
     default="ipc",
     choices=["ipc", "tcp"],
     help="ZMQ transfer protocol, whether ZMQ uses IPC or TCP connection",
+)
+parser.add_argument(
+    "--metastore-client-config",
+    type=json.loads,
+    default=None,
+    help="Enable metastore client config.",
 )
 parser.add_argument("--model-name", required=True, help="Model name")
 parser.add_argument("--image-path", required=True, help="Path to the image")
@@ -71,6 +78,7 @@ async def run_single_proxy(proxy_addr):
         model_name=args.model_name,
         enable_health_monitor=False,
         transfer_protocol=args.transfer_protocol,
+        metastore_client_config=args.metastore_client_config,
     )
     try:
         # The current prompt format follows Qwen2.5-VL-3B-Instruct.
@@ -92,7 +100,7 @@ async def run_single_proxy(proxy_addr):
             for i in range(10)
         ]
         await asyncio.gather(*tasks)
-        if llm_service_envs.TIMECOUNT_ENABLED:
+        if lm_service_envs.TIMECOUNT_ENABLED:
             # wait for logging
             await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
             await p.log_metrics()
