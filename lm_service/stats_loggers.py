@@ -245,7 +245,7 @@ class MetricsReporter:
             "Avg prefill time requests: %.3f ms, "
             "Avg mean time per output token requests: %.3f ms, "
             "Avg time to first token: %.3f ms, "
-            "Avg proxy ttft: %.3f ms"
+            "Avg proxy ttft: %.3f ms, "
         )
         if self.server_type == ServerType.E_INSTANCE:
             log_msg += "Avg proxy to encoder requests: %.3f ms, "
@@ -265,8 +265,10 @@ class MetricsReporter:
                         value.get("queue_time_requests", 0.0),
                         value.get("prefill_time_requests", 0.0),
                         value.get("mean_time_per_output_token_requests", 0.0),
-                        value.get("time_to_first_token", 0.0),
-                        value.get("proxy_ttft_avg", 0.0),
+                        value.get("time_to_first_token", 0.0)
+                        if self.has_d_instance() else 0.0,
+                        value.get("proxy_ttft_avg", 0.0)
+                        if self.has_d_instance() else 0.0,
                         value.get("proxy_to_encode_time_avg", 0.0)
                         if self.server_type == ServerType.E_INSTANCE
                         else value.get("proxy_to_pd_time_avg", 0.0),
@@ -285,3 +287,6 @@ class MetricsReporter:
         logger.info("Metrics for %s instances:" % self.server_type)
         for iid, metric in metrics.items():
             logger.info(metric)
+
+    def has_d_instance(self) -> bool:
+        return self.server_type == ServerType.D_INSTANCE or self.server_type == ServerType.PD_INSTANCE
