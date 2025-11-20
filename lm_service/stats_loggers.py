@@ -242,7 +242,8 @@ class MetricsReporter:
             )
             return 0.0
         return (
-            self.proxy_to_instance_time_total[work_addr] * 1000.0
+            self.proxy_to_instance_time_total[work_addr]
+            * 1000.0
             / self.proxy_to_instance_time_count[work_addr]
             if self.proxy_to_instance_time_count[work_addr] > 0
             else 0.0
@@ -251,7 +252,7 @@ class MetricsReporter:
     def add_proxy_to_instance_time(self, work_addr: str, time: float):
         self.proxy_to_instance_time_count[work_addr] += 1
         self.proxy_to_instance_time_total[work_addr] += time
-    
+
     def cal_proxy_ttft(
         self, ttft_recorded_flag: bool, start: float, resp
     ) -> bool:

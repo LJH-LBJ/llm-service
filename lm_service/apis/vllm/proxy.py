@@ -877,7 +877,9 @@ class Proxy(EngineClient):
                         )
                     )
                     proxy_ttft_avg = (
-                        self.pd_metrics_logger.proxy_ttft_total * 1000.0 / self.pd_metrics_logger.proxy_ttft_count
+                        self.pd_metrics_logger.proxy_ttft_total
+                        * 1000.0
+                        / self.pd_metrics_logger.proxy_ttft_count
                         if self.pd_metrics_logger.proxy_ttft_count > 0
                         else 0.0
                     )
@@ -901,7 +903,9 @@ class Proxy(EngineClient):
                         )
                     )
                     proxy_ttft_avg = (
-                        self.d_metrics_logger.proxy_ttft_total * 1000.0 / self.d_metrics_logger.proxy_ttft_count
+                        self.d_metrics_logger.proxy_ttft_total
+                        * 1000.0
+                        / self.d_metrics_logger.proxy_ttft_count
                         if self.d_metrics_logger.proxy_ttft_count > 0
                         else 0.0
                     )
