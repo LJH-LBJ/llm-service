@@ -595,7 +595,7 @@ class Proxy(EngineClient):
             if self.is_pd_merged:
                 async for pd_response in self._run_pd(request, q):
                     yield self._to_request_output(pd_response)
-                    ttft_recorded_flag = self.cal_proxy_ttft(
+                    ttft_recorded_flag = self.pd_metrics_logger.cal_proxy_ttft(
                         ttft_recorded_flag,
                         proxy_ttft_start,
                         pd_response,
@@ -604,7 +604,7 @@ class Proxy(EngineClient):
                 await self._run_prefill(request, q)
                 async for d_response in self._run_decode(request, q):
                     yield self._to_request_output(d_response)
-                    ttft_recorded_flag = self.cal_proxy_ttft(
+                    ttft_recorded_flag = self.d_metrics_logger.cal_proxy_ttft(
                         ttft_recorded_flag,
                         proxy_ttft_start,
                         d_response,
@@ -614,19 +614,6 @@ class Proxy(EngineClient):
             raise RuntimeError(f"Invalid Parameters: {e}.") from e
         finally:
             self.queues.pop(request_id, None)
-
-    def cal_proxy_ttft(
-        self, ttft_recorded_flag: bool, start: float, resp
-    ) -> bool:
-        if ttft_recorded_flag:
-            return True
-        token_ids = getattr(resp, "token_ids", None)
-        has_first_token = token_ids and len(token_ids) > 0
-        if not has_first_token:
-            return False
-        self.proxy_ttft_count += 1
-        self.proxy_ttft_total += time.perf_counter() - start
-        return True
 
     async def abort_requests_from_unhealth_endpoints(
         self, server_type, unhealth_endpoints, request_stats_monitor
@@ -894,10 +881,16 @@ class Proxy(EngineClient):
                             addr
                         )
                     )
+                    proxy_ttft_avg = (
+                        self.pd_metrics_logger.proxy_ttft_total * 1000.0 / self.pd_metrics_logger.proxy_ttft_count
+                        if self.pd_metrics_logger.proxy_ttft_count > 0
+                        else 0.0
+                    )
                     response.metrics[addr].update(
                         {
                             "proxy_to_encode_time_avg": proxy2encode_avg,
                             "proxy_to_pd_time_avg": proxy2pd_avg,
+                            "proxy_ttft_avg": proxy_ttft_avg,
                         }
                     )
 
@@ -911,6 +904,11 @@ class Proxy(EngineClient):
                         self.d_metrics_logger.get_avg_proxy_to_instance_time(
                             addr
                         )
+                    )
+                    proxy_ttft_avg = (
+                        self.d_metrics_logger.proxy_ttft_total * 1000.0 / self.d_metrics_logger.proxy_ttft_count
+                        if self.d_metrics_logger.proxy_ttft_count > 0
+                        else 0.0
                     )
                     response.metrics[addr].update(
                         {

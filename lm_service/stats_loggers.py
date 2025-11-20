@@ -232,6 +232,8 @@ class MetricsReporter:
         self.proxy_to_instance_time_total: defaultdict[str, float] = (
             defaultdict(float)
         )
+        self.proxy_ttft_total: float = 0.0
+        self.proxy_ttft_count: int = 0
 
     def get_avg_proxy_to_instance_time(self, work_addr: str) -> float:
         if work_addr not in self.proxy_to_instance_time_count:
@@ -249,6 +251,19 @@ class MetricsReporter:
     def add_proxy_to_instance_time(self, work_addr: str, time: float):
         self.proxy_to_instance_time_count[work_addr] += 1
         self.proxy_to_instance_time_total[work_addr] += time
+    
+    def cal_proxy_ttft(
+        self, ttft_recorded_flag: bool, start: float, resp
+    ) -> bool:
+        if ttft_recorded_flag:
+            return True
+        token_ids = getattr(resp, "token_ids", None)
+        has_first_token = token_ids and len(token_ids) > 0
+        if not has_first_token:
+            return False
+        self.proxy_ttft_count += 1
+        self.proxy_ttft_total += time.perf_counter() - start
+        return True
 
     async def get_metrics(self) -> None:
         metrics = {}

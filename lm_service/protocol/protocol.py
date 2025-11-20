@@ -57,7 +57,7 @@ class GenerationResponse(msgspec.Struct):
 
     @classmethod
     def from_request_output(
-        self, request_output: RequestOutput
+        cls, request_output: RequestOutput
     ) -> "GenerationResponse":
         assert len(request_output.outputs) == 1, "Only support N=1 right now."
         out = request_output.outputs[0]
