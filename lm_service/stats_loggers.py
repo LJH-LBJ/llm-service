@@ -240,7 +240,7 @@ class MetricsReporter:
             )
             return 0.0
         return (
-            self.proxy_to_instance_time_total[work_addr]
+            self.proxy_to_instance_time_total[work_addr] * 1000.0
             / self.proxy_to_instance_time_count[work_addr]
             if self.proxy_to_instance_time_count[work_addr] > 0
             else 0.0
