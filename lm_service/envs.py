@@ -35,6 +35,9 @@ environment_variables: dict[str, Callable[[], Any]] = {
         "RandomRouter",
         ["RandomRouter", "RoundRobinRouter", "LeastInFlightRouter"],
     ),
+    "LM_SERVICE_REQUEST_TIMEOUT_SECONDS": lambda: int(
+        os.getenv("LM_SERVICE_REQUEST_TIMEOUT_SECONDS", 120)
+    ),
 }
 
 # --8<-- [end:env-vars-definition]
