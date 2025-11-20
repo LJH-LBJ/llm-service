@@ -855,7 +855,7 @@ class Proxy(EngineClient):
             elif server_type == ServerType.E_INSTANCE:
                 socket = self.to_encode_sockets[addr]
 
-            await socket.send_multipart(msg, copy=False)
+            await socket.send_multipart(msg, copy=False) # type: ignore
             response = await q.get()
             # calculate proxy to pd/encode time
             if (
@@ -864,44 +864,43 @@ class Proxy(EngineClient):
             ):
                 # calculate proxy to pd/encode time average
                 # add to metrics
-                proxy2encode_avg = (
-                    self.encoder_metrics_logger.get_avg_proxy_to_instance_time(
-                        addr
+                if server_type == ServerType.E_INSTANCE:
+                    proxy2instance_avg = (
+                        self.encoder_metrics_logger.get_avg_proxy_to_instance_time(
+                            addr
+                        )
                     )
-                )
+                elif server_type == ServerType.PD_INSTANCE:
+                    proxy2instance_avg = (
+                        self.pd_metrics_logger.get_avg_proxy_to_instance_time(
+                            addr
+                        )
+                    )
+                    proxy_ttft_avg = (
+                        self.pd_metrics_logger.get_avg_proxy_ttft()
+                    )
+                elif server_type == ServerType.P_INSTANCE:
+                    proxy2instance_avg = (
+                        self.p_metrics_logger.get_avg_proxy_to_instance_time(
+                            addr
+                        )
+                    )
+                elif server_type == ServerType.D_INSTANCE:
+                    proxy2instance_avg = (
+                        self.d_metrics_logger.get_avg_proxy_to_instance_time(
+                            addr
+                        )
+                    )
+                    proxy_ttft_avg = (
+                        self.d_metrics_logger.get_avg_proxy_ttft()
+                    )
                 for engine_id in response.metrics:
-                    if self.is_pd_merged:
-                        proxy2pd_avg = self.pd_metrics_logger.get_avg_proxy_to_instance_time(
-                            addr
-                        )
-                        proxy_ttft_avg = (
-                            self.pd_metrics_logger.get_avg_proxy_ttft()
-                        )
-                        response.metrics[engine_id].update(
-                            {
-                                "proxy_to_encode_time_avg": proxy2encode_avg,
-                                "proxy_to_pd_time_avg": proxy2pd_avg,
-                                "proxy_ttft_avg": proxy_ttft_avg,
-                            }
-                        )
-                    else:
-                        proxy2p_avg = self.p_metrics_logger.get_avg_proxy_to_instance_time(
-                            addr
-                        )
-                        proxy2d_avg = self.d_metrics_logger.get_avg_proxy_to_instance_time(
-                            addr
-                        )
-                        proxy_ttft_avg = (
-                            self.d_metrics_logger.get_avg_proxy_ttft()
-                        )
-                        response.metrics[engine_id].update(
-                            {
-                                "proxy_to_encode_time_avg": proxy2encode_avg,
-                                "proxy_to_p_time_avg": proxy2p_avg,
-                                "proxy_to_d_time_avg": proxy2d_avg,
-                                "proxy_ttft_avg": proxy_ttft_avg,
-                            }
-                        )
+                    response.metrics[engine_id].update(
+                        {
+                            "proxy_to_instance_time_avg": proxy2instance_avg, # type: ignore
+                            "proxy_ttft_avg": proxy_ttft_avg, # type: ignore
+                        }
+                    )
 
                 return response.metrics
             elif isinstance(response, Exception):

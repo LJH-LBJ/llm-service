@@ -311,9 +311,7 @@ class MetricsReporter:
                         value.get("proxy_ttft_avg", 0.0)
                         if self.has_d_instance()
                         else 0.0,
-                        value.get("proxy_to_encode_time_avg", 0.0)
-                        if self.server_type == ServerType.E_INSTANCE
-                        else value.get("proxy_to_pd_time_avg", 0.0),
+                        value.get("proxy_to_instance_time_avg", 0.0),
                     )
 
                 metrics[work_addr] = msg
