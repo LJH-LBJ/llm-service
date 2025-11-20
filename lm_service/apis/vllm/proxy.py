@@ -13,7 +13,6 @@ import numpy as np
 import zmq
 import zmq.asyncio
 from vllm.config import ModelConfig, VllmConfig
-from lm_service.protocol.protocol import ExitRequest
 from vllm.engine.protocol import EngineClient
 from vllm.inputs.data import PromptType
 from vllm.inputs.preprocess import InputPreprocessor
@@ -23,7 +22,7 @@ from vllm.pooling_params import PoolingParams
 from vllm.sampling_params import SamplingParams
 from vllm.transformers_utils.tokenizer import AnyTokenizer
 from vllm.utils import Device, get_ip, get_open_port
-
+from lm_service.protocol.protocol import ExitRequest
 from lm_service.protocol.protocol import (
     FailureResponse,
     GenerationRequest,
@@ -804,14 +803,8 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.HEARTBEAT, payload)
-            if server_type == ServerType.PD_INSTANCE:
-                socket = self.to_pd_sockets[addr]
-            elif server_type == ServerType.P_INSTANCE:
-                socket = self.to_p_sockets[addr]
-            elif server_type == ServerType.D_INSTANCE:
-                socket = self.to_d_sockets[addr]
-            elif server_type == ServerType.E_INSTANCE:
-                socket = self.to_encode_sockets[addr]
+            sockets = self._get_socket_from_server_type(server_type)
+            socket = sockets[addr]
 
             await socket.send_multipart(msg, copy=False)
             response = await q.get()
@@ -842,14 +835,8 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.METRICS, payload)
-            if server_type == ServerType.PD_INSTANCE:
-                socket = self.to_pd_sockets[addr]
-            elif server_type == ServerType.P_INSTANCE:
-                socket = self.to_p_sockets[addr]
-            elif server_type == ServerType.D_INSTANCE:
-                socket = self.to_d_sockets[addr]
-            elif server_type == ServerType.E_INSTANCE:
-                socket = self.to_encode_sockets[addr]
+            sockets = self._get_socket_from_server_type(server_type)
+            socket = sockets[addr]
 
             await socket.send_multipart(msg, copy=False)
             response = await q.get()
@@ -925,14 +912,7 @@ class Proxy(EngineClient):
             return
         worker_addr = f"{self.transfer_protocol}://{addr}" \
             if not addr.startswith(self.transfer_protocol) else addr
-        if server_type == ServerType.PD_INSTANCE:
-            sockets = self.to_pd_sockets
-        elif server_type == ServerType.P_INSTANCE:
-            sockets = self.to_p_sockets
-        elif server_type == ServerType.D_INSTANCE:
-            sockets = self.to_d_sockets
-        elif server_type == ServerType.E_INSTANCE:
-            sockets = self.to_encode_sockets
+        sockets = self._get_socket_from_server_type(server_type)
         socket = sockets.get(worker_addr, None)
         if socket is None:
             logger.warning(
@@ -977,6 +957,7 @@ class Proxy(EngineClient):
             if req.addr in sockets:
                 sockets.pop(req.addr, None)
                 req_server_type = server_type
+                break
         if req_server_type is None:
             logger.warning(
                 "Instance addr %s not found.",
@@ -1046,6 +1027,20 @@ class Proxy(EngineClient):
 
     async def reset_mm_cache(self) -> None:
         raise NotImplementedError
+    
+    def _get_socket_from_server_type(
+        self, server_type: ServerType,
+    ) -> dict[str, zmq.asyncio.Socket]:
+        if server_type == ServerType.PD_INSTANCE:
+            return self.to_pd_sockets
+        elif server_type == ServerType.P_INSTANCE:
+            return self.to_p_sockets
+        elif server_type == ServerType.D_INSTANCE:
+            return self.to_d_sockets
+        elif server_type == ServerType.E_INSTANCE:
+            return self.to_encode_sockets
+        else:
+            raise ValueError(f"Unknown server type: {server_type}")
 
 
 def _has_mm_data(prompt: PromptType) -> bool:
