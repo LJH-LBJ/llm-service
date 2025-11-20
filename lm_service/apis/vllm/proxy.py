@@ -865,11 +865,6 @@ class Proxy(EngineClient):
             ):
                 # calculate proxy to pd/encode time average
                 # add to metrics
-                proxy_ttft_avg = (
-                    self.proxy_ttft_total * 1000.0 / self.proxy_ttft_count
-                    if self.proxy_ttft_count > 0
-                    else 0.0
-                )
                 proxy2encode_avg = (
                     self.encoder_metrics_logger.get_avg_proxy_to_instance_time(
                         addr
