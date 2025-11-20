@@ -580,8 +580,8 @@ class Proxy(EngineClient):
         )
 
         try:
-            proxy_ttft_start = time.perf_counter()
-            ttft_recorded_flag = False
+            proxy_ttft_start: float = time.perf_counter()
+            ttft_recorded_flag: bool = False
             # need to validate to avoid decode failed later
             req_dict = msgspec.to_builtins(request)
             request = msgspec.convert(req_dict, GenerationRequest, strict=True)
@@ -864,7 +864,7 @@ class Proxy(EngineClient):
             ):
                 # calculate proxy to pd/encode time average
                 # add to metrics
-                proxy_ttft_avg = 0.0
+                proxy_ttft_avg: float = 0.0
                 if server_type == ServerType.E_INSTANCE:
                     proxy2instance_avg = self.encoder_metrics_logger.get_avg_proxy_to_instance_time(
                         addr
