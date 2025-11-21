@@ -945,7 +945,7 @@ class Proxy(EngineClient):
         node_key = (
             f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.name}"
         )
-        if self.metastore_client:
+        if lm_service_envs.LM_SERVICE_METASTORE_CLIENT is not None and self.metastore_client:
             self.metastore_client.delete_metadata(node_key, addr)
 
     async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
