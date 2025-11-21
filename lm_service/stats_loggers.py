@@ -250,7 +250,7 @@ class MetricsReporter:
         tasks = [
             asyncio.create_task(
                 asyncio.wait_for(
-                    self._get_metrics_func(work_addr),
+                    self._get_metrics_func(self.server_type, work_addr),
                     timeout=1.0,
                 )
             )
