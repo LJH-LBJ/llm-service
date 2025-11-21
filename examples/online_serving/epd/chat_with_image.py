@@ -11,7 +11,6 @@ from PIL import Image
 from vllm import SamplingParams
 import vllm.envs as envs
 from lm_service.apis.vllm.proxy import Proxy
-from lm_service.protocol.protocol import ServerType
 import lm_service.envs as lm_service_envs
 
 parser = argparse.ArgumentParser()
@@ -123,7 +122,7 @@ async def main():
                     p.exit_instance(
                         addr=args.pd_addr_list[i]
                     ),
-                    timeout=lm_service_envs.WORKER_DRAINING_TIMEOUT,
+                    timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
                 )
             )
             exit_tasks.append(exit_task)
