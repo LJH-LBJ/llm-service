@@ -122,14 +122,13 @@ class DisaggWorker:
         self.decoder_heartbeat = msgspec.msgpack.Decoder(HeartbeatRequest)
         self.decoder_abort = msgspec.msgpack.Decoder(GenerationRequest)
         self.decoder_metrics = msgspec.msgpack.Decoder(MetricsRequest)
-        self.decoder_exit = msgspec.msgpack.Decoder(ExitRequest)
         self.encoder = msgspec.msgpack.Encoder()
         self.stopping = False  # whether the worker is stopping
         self.running_requests: set[asyncio.Task] = set()
 
     def shutdown(self):
         for socket in self.to_proxy.values():
-            socket.close(linger=5000)
+            socket.close(linger=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT * 1000)
         self.ctx.destroy()
 
         for running_request in self.running_requests:
@@ -178,7 +177,7 @@ class DisaggWorker:
             # poll for requests from proxy
             # if worker is stopping, exit the loop
             try:
-                events = dict(await poller.poll(timeout=1000))
+                events = dict(await poller.poll(timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT * 1000/2))
             except asyncio.CancelledError:
                 # When the worker is stopping, the poller may be cancelled.
                 # So we don't raise error.
@@ -228,8 +227,7 @@ class DisaggWorker:
             metrics_req = self.decoder_metrics.decode(req_data)
             await self._metrics_handler(metrics_req)
         elif req_type == RequestType.EXIT:
-            exit_req = self.decoder_exit.decode(req_data)
-            await self._exit_handler(exit_req)
+            await self._exit_handler()
         else:
             raise Exception(f"Unknown Request Type: {req_type.decode()}.")
 
@@ -295,7 +293,7 @@ class DisaggWorker:
         await self._handle_response(req, msg)
 
     # handle exit request from proxy
-    async def _exit_handler(self, req: ExitRequest):
+    async def _exit_handler(self) -> None:
         if self.stopping:
             return
         # set stopping flag to exit busy loop
@@ -321,9 +319,6 @@ class DisaggWorker:
 
     # graceful shutdown on SIGTERM
     async def _shutdown_handler(self, reason: str) -> None:
-        if self.stopping:
-            return
-        self.stopping = True
         request_id = str(uuid.uuid4())
         # send exit request to the proxy
         msg = (
@@ -339,24 +334,7 @@ class DisaggWorker:
         )
         for socket in self.to_proxy.values():
             await socket.send_multipart(msg, copy=False)
-        # cancel all running requests
-        for t in list(self.running_requests):
-            t.cancel()
-        # wait for all running requests to finish
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*self.running_requests, return_exceptions=True),
-                timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            logger.warning("Some tasks did not finish cleanup in %s.", 
-                           lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT)
-        # closing the socket here to avoid waiting for proxy to detect worker exit
-        try:
-            self.from_proxy.close(linger=0)
-        except Exception:
-            logger.error("Error closing from_proxy socket during shutdown.")
-            pass
+        await self._exit_handler()
 
     async def _generate(
         self,
