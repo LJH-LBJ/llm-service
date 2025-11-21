@@ -915,7 +915,7 @@ class Proxy(EngineClient):
             if not addr.startswith(self.transfer_protocol)
             else addr
         )
-        server_type, sockets = self._get_sockets_and_server_types_from_addr(addr)
+        server_type, sockets = self._get_sockets_and_server_types_from_addr(worker_addr)
         socket = sockets.get(worker_addr, None)
         if socket is None:
             logger.warning(
