@@ -960,26 +960,19 @@ class Proxy(EngineClient):
                 self._run_output_handler()
             )
         # find instance id by addr, stop routing new requests to it
-        req_server_type = None
-        for server_type, sockets in (
-            (ServerType.PD_INSTANCE, self.to_pd_sockets),
-            (ServerType.P_INSTANCE, self.to_p_sockets),
-            (ServerType.D_INSTANCE, self.to_d_sockets),
-            (ServerType.E_INSTANCE, self.to_encode_sockets),
-        ):
-            if req.addr in sockets:
-                sockets.pop(req.addr, None)
-                req_server_type = server_type
-                break
-        if req_server_type is None:
+        server_type, sockets = self._get_sockets_and_server_types_from_addr(
+            req.addr
+        )
+        sockets.pop(req.addr, None)  # stop routing new requests to it
+        if server_type is None:
             logger.warning(
                 "Instance addr %s not found.",
                 req.addr,
             )
         else:
             logger.info(
-                "Instance %s addr %s draining (reason=%s, in_flight=%d).",
-                req_server_type,
+                "Instance %s addr %s is exiting (reason=%s, in_flight=%d).",
+                server_type,
                 req.addr,
                 req.reason,
                 req.in_flight,
