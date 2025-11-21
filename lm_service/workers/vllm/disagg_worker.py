@@ -300,11 +300,24 @@ class DisaggWorker:
             return
         # set stopping flag to exit busy loop
         self.stopping = True
+        # cancel all running requests
+        for t in list(self.running_requests):
+            t.cancel()
         # wait for all running requests to finish
-        if self.running_requests:
-            await asyncio.gather(
-                *list(self.running_requests), return_exceptions=True
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*self.running_requests, return_exceptions=True),
+                timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
             )
+        except asyncio.TimeoutError:
+            logger.warning("Some tasks did not finish cleanup in %s.", 
+                           lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT)
+        try:
+            self.from_proxy.close(linger=0)
+        except Exception:
+            logger.error("Error closing from_proxy socket during shutdown.")
+            pass
+
 
     # graceful shutdown on SIGTERM
     async def _shutdown_handler(self, reason: str) -> None:
@@ -326,11 +339,18 @@ class DisaggWorker:
         )
         for socket in self.to_proxy.values():
             await socket.send_multipart(msg, copy=False)
+        # cancel all running requests
+        for t in list(self.running_requests):
+            t.cancel()
         # wait for all running requests to finish
-        if self.running_requests:
-            await asyncio.gather(
-                *list(self.running_requests), return_exceptions=True
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*self.running_requests, return_exceptions=True),
+                timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
             )
+        except asyncio.TimeoutError:
+            logger.warning("Some tasks did not finish cleanup in %s.", 
+                           lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT)
         # closing the socket here to avoid waiting for proxy to detect worker exit
         try:
             self.from_proxy.close(linger=0)
