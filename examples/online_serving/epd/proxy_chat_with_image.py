@@ -112,7 +112,7 @@ async def run_single_proxy(proxy_addr):
             exit_task = asyncio.create_task(
                 asyncio.wait_for(
                     p.exit_instance(
-                        ServerType.PD_INSTANCE, addr=args.pd_addr_list[i]
+                        addr=args.pd_addr_list[i]
                     ),
                     timeout=lm_service_envs.WORKER_DRAINING_TIMEOUT,
                 )

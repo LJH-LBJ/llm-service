@@ -803,7 +803,7 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.HEARTBEAT, payload)
-            sockets = self._get_socket_from_server_type(server_type)
+            _, sockets = self._get_sockets_and_server_types_from_addr(addr)
             socket = sockets[addr]
 
             await socket.send_multipart(msg, copy=False)
@@ -835,7 +835,7 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.METRICS, payload)
-            sockets = self._get_socket_from_server_type(server_type)
+            _, sockets = self._get_sockets_and_server_types_from_addr(addr)
             socket = sockets[addr]
 
             await socket.send_multipart(msg, copy=False)
@@ -892,7 +892,7 @@ class Proxy(EngineClient):
         finally:
             self.queues.pop(request_id, None)
 
-    async def exit_instance(self, server_type: ServerType, addr: str) -> None:
+    async def exit_instance(self, addr: str) -> None:
         """
         request the specified instance to exit gracefully:
         1. add the instance to the draining set (stop routing new requests)
@@ -907,7 +907,7 @@ class Proxy(EngineClient):
             )
         if addr is None:
             logger.warning(
-                "Exit instance failed for %s, addr is None.", server_type
+                "Exit instance failed, addr is None.",
             )
             return
         worker_addr = (
@@ -915,7 +915,7 @@ class Proxy(EngineClient):
             if not addr.startswith(self.transfer_protocol)
             else addr
         )
-        sockets = self._get_socket_from_server_type(server_type)
+        server_type, sockets = self._get_sockets_and_server_types_from_addr(addr)
         socket = sockets.get(worker_addr, None)
         if socket is None:
             logger.warning(
@@ -1036,21 +1036,19 @@ class Proxy(EngineClient):
     async def reset_mm_cache(self) -> None:
         raise NotImplementedError
 
-    def _get_socket_from_server_type(
+    def _get_sockets_and_server_types_from_addr(
         self,
-        server_type: ServerType,
-    ) -> dict[str, zmq.asyncio.Socket]:
-        if server_type == ServerType.PD_INSTANCE:
-            return self.to_pd_sockets
-        elif server_type == ServerType.P_INSTANCE:
-            return self.to_p_sockets
-        elif server_type == ServerType.D_INSTANCE:
-            return self.to_d_sockets
-        elif server_type == ServerType.E_INSTANCE:
-            return self.to_encode_sockets
-        else:
-            raise ValueError(f"Unknown server type: {server_type}")
-
+        addr: str
+    ) -> tuple[ServerType, dict[str, zmq.asyncio.Socket]]:
+        for server_type, sockets in [
+            (ServerType.PD_INSTANCE, self.to_pd_sockets),
+            (ServerType.P_INSTANCE, self.to_p_sockets),
+            (ServerType.D_INSTANCE, self.to_d_sockets),
+            (ServerType.E_INSTANCE, self.to_encode_sockets),
+        ]:
+            if addr in sockets:
+                return server_type, sockets
+        raise ValueError(f"Address {addr} not found in any server type sockets.")
 
 def _has_mm_data(prompt: PromptType) -> bool:
     if isinstance(prompt, dict):
