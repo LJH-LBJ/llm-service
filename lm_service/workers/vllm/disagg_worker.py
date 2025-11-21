@@ -335,6 +335,7 @@ class DisaggWorker:
         try:
             self.from_proxy.close(linger=0)
         except Exception:
+            logger.error("Error closing from_proxy socket during shutdown.")
             pass
 
     async def _generate(

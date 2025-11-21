@@ -1035,9 +1035,10 @@ class Proxy(EngineClient):
 
     async def reset_mm_cache(self) -> None:
         raise NotImplementedError
-    
+
     def _get_socket_from_server_type(
-        self, server_type: ServerType,
+        self,
+        server_type: ServerType,
     ) -> dict[str, zmq.asyncio.Socket]:
         if server_type == ServerType.PD_INSTANCE:
             return self.to_pd_sockets
