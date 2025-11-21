@@ -18,7 +18,6 @@ import vllm.envs as envs
 from vllm.config import ECTransferConfig, KVTransferConfig
 
 from lm_service.stats_loggers import DisaggWorkerStatsLogger
-from lm_service.protocol.protocol import ExitRequest
 from lm_service.protocol.protocol import (
     FailureResponse,
     GenerationRequest,
@@ -128,7 +127,9 @@ class DisaggWorker:
 
     def shutdown(self):
         for socket in self.to_proxy.values():
-            socket.close(linger=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT * 1000)
+            socket.close(
+                linger=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT * 1000
+            )
         self.ctx.destroy()
 
         for running_request in self.running_requests:
@@ -177,7 +178,13 @@ class DisaggWorker:
             # poll for requests from proxy
             # if worker is stopping, exit the loop
             try:
-                events = dict(await poller.poll(timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT * 1000/2))
+                events = dict(
+                    await poller.poll(
+                        timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT
+                        * 1000
+                        / 2
+                    )
+                )
             except asyncio.CancelledError:
                 # When the worker is stopping, the poller may be cancelled.
                 # So we don't raise error.
@@ -308,14 +315,15 @@ class DisaggWorker:
                 timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
             )
         except asyncio.TimeoutError:
-            logger.warning("Some tasks did not finish cleanup in %s.", 
-                           lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT)
+            logger.warning(
+                "Some tasks did not finish cleanup in %s.",
+                lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
+            )
         try:
             self.from_proxy.close(linger=0)
         except Exception:
             logger.error("Error closing from_proxy socket during shutdown.")
             pass
-
 
     # graceful shutdown on SIGTERM
     async def _shutdown_handler(self, reason: str) -> None:

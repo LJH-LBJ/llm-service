@@ -12,7 +12,6 @@ from PIL import Image
 from vllm import SamplingParams
 import vllm.envs as envs
 from lm_service.apis.vllm.proxy import Proxy
-from lm_service.protocol.protocol import ServerType
 import lm_service.envs as lm_service_envs
 
 PROXY_NUM = 1
@@ -111,9 +110,7 @@ async def run_single_proxy(proxy_addr):
         for i in range(pd_num):
             exit_task = asyncio.create_task(
                 asyncio.wait_for(
-                    p.exit_instance(
-                        addr=args.pd_addr_list[i]
-                    ),
+                    p.exit_instance(addr=args.pd_addr_list[i]),
                     timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
                 )
             )

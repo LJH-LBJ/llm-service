@@ -119,9 +119,7 @@ async def main():
         for i in range(pd_num):
             exit_task = asyncio.create_task(
                 asyncio.wait_for(
-                    p.exit_instance(
-                        addr=args.pd_addr_list[i]
-                    ),
+                    p.exit_instance(addr=args.pd_addr_list[i]),
                     timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
                 )
             )

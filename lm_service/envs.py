@@ -69,7 +69,7 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     "LM_SERVICE_WORKER_EXIT_TIMEOUT": lambda: int(
         os.getenv("LM_SERVICE_WORKER_EXIT_TIMEOUT", 5)
-    )
+    ),
 }
 
 # --8<-- [end:env-vars-definition]

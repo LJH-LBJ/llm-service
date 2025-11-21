@@ -915,7 +915,9 @@ class Proxy(EngineClient):
             if not addr.startswith(self.transfer_protocol)
             else addr
         )
-        server_type, sockets = self._get_sockets_and_server_types_from_addr(worker_addr)
+        server_type, sockets = self._get_sockets_and_server_types_from_addr(
+            worker_addr
+        )
         socket = sockets.get(worker_addr, None)
         if socket is None:
             logger.warning(
@@ -945,7 +947,10 @@ class Proxy(EngineClient):
         node_key = (
             f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.name}"
         )
-        if lm_service_envs.LM_SERVICE_METASTORE_CLIENT is not None and self.metastore_client:
+        if (
+            lm_service_envs.LM_SERVICE_METASTORE_CLIENT is not None
+            and self.metastore_client
+        ):
             self.metastore_client.delete_metadata(node_key, addr)
 
     async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
@@ -1037,8 +1042,7 @@ class Proxy(EngineClient):
         raise NotImplementedError
 
     def _get_sockets_and_server_types_from_addr(
-        self,
-        addr: str
+        self, addr: str
     ) -> tuple[ServerType, dict[str, zmq.asyncio.Socket]]:
         for server_type, sockets in [
             (ServerType.PD_INSTANCE, self.to_pd_sockets),
@@ -1048,7 +1052,10 @@ class Proxy(EngineClient):
         ]:
             if addr in sockets:
                 return server_type, sockets
-        raise ValueError(f"Address {addr} not found in any server type sockets.")
+        raise ValueError(
+            f"Address {addr} not found in any server type sockets."
+        )
+
 
 def _has_mm_data(prompt: PromptType) -> bool:
     if isinstance(prompt, dict):
