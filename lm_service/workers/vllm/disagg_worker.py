@@ -323,7 +323,6 @@ class DisaggWorker:
             self.from_proxy.close(linger=0)
         except Exception:
             logger.error("Error closing from_proxy socket during shutdown.")
-            pass
 
     # graceful shutdown on SIGTERM
     async def _shutdown_handler(self, reason: str) -> None:
