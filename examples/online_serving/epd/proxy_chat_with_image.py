@@ -5,7 +5,6 @@ import asyncio
 import uuid
 import json
 
-
 import numpy as np
 from PIL import Image
 
