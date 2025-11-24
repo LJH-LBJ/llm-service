@@ -124,6 +124,7 @@ class DisaggWorker:
         self.encoder = msgspec.msgpack.Encoder()
         self.stopping = False  # whether the worker is stopping
         self.running_requests: set[asyncio.Task] = set()
+        self.poller = zmq.asyncio.Poller()
 
     def shutdown(self):
         for socket in self.to_proxy.values():
@@ -162,8 +163,7 @@ class DisaggWorker:
     async def run_busy_loop(self):
         logger.info("DisaggWorker is ready To handle requests.")
 
-        poller = zmq.asyncio.Poller()
-        poller.register(self.from_proxy, zmq.POLLIN)
+        self.poller.register(self.from_proxy, zmq.POLLIN)
         if lm_service_envs.TIMECOUNT_ENABLED:
             # log engine stats (logger stats and EPD stats (if enabled))
             async def _force_log():
@@ -179,7 +179,7 @@ class DisaggWorker:
             # if worker is stopping, exit the loop
             try:
                 events = dict(
-                    await poller.poll(
+                    await self.poller.poll(
                         timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT
                         * 1000
                         / 2
@@ -193,8 +193,6 @@ class DisaggWorker:
                     logger.info("Poll cancelled due to worker shutdown.")
                     break
                 raise
-            if self.stopping:
-                break
             if not events:
                 continue
             if self.from_proxy in events:
@@ -320,6 +318,13 @@ class DisaggWorker:
                 lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
             )
         try:
+            # Unregister from poller before closing the socket
+            if hasattr(self, "poller"):
+                try:
+                    self.poller.unregister(self.from_proxy)
+                except Exception:
+                    logger.warning("Could not unregister from_proxy from poller during shutdown.")
+
             self.from_proxy.close(linger=0)
         except Exception:
             logger.error("Error closing from_proxy socket during shutdown.")

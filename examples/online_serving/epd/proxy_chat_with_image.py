@@ -104,16 +104,17 @@ async def run_single_proxy(proxy_addr):
             await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
             await p.log_metrics()
         # test for exit_instance
-        pd_num = len(args.pd_addr_list)
         exit_tasks = []
-        for i in range(pd_num):
-            exit_task = asyncio.create_task(
-                asyncio.wait_for(
-                    p.exit_instance(addr=args.pd_addr_list[i]),
-                    timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
+        if args.pd_addr_list:
+            pd_num = len(args.pd_addr_list)
+            for i in range(pd_num):
+                exit_task = asyncio.create_task(
+                    asyncio.wait_for(
+                        p.exit_instance(addr=args.pd_addr_list[i]),
+                        timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
+                    )
                 )
-            )
-            exit_tasks.append(exit_task)
+                exit_tasks.append(exit_task)
         if exit_tasks:
             await asyncio.gather(*exit_tasks)
     finally:

@@ -22,8 +22,8 @@ from vllm.pooling_params import PoolingParams
 from vllm.sampling_params import SamplingParams
 from vllm.transformers_utils.tokenizer import AnyTokenizer
 from vllm.utils import Device, get_ip, get_open_port
-from lm_service.protocol.protocol import ExitRequest
 from lm_service.protocol.protocol import (
+    ExitRequest,
     FailureResponse,
     GenerationRequest,
     GenerationResponse,
@@ -955,7 +955,7 @@ class Proxy(EngineClient):
         )
         if (
             lm_service_envs.LM_SERVICE_METASTORE_CLIENT is not None
-            and self.metastore_client
+            and hasattr(self.metastore_client, "delete_metadata")
         ):
             self.metastore_client.delete_metadata(node_key, addr)
 
@@ -966,24 +966,24 @@ class Proxy(EngineClient):
                 self._run_output_handler()
             )
         # find instance id by addr, stop routing new requests to it
-        server_type, sockets = self._get_sockets_and_server_types_from_addr(
-            req.addr,
-            req.server_type
-        )
-        sockets.pop(req.addr, None)  # stop routing new requests to it
-        if server_type is None:
+        try:
+            server_type, sockets = self._get_sockets_and_server_types_from_addr(
+                req.addr
+            )
+        except ValueError:
             logger.warning(
                 "Instance addr %s not found.",
                 req.addr,
             )
-        else:
-            logger.info(
-                "Instance %s addr %s is exiting (reason=%s, in_flight=%d).",
-                server_type,
-                req.addr,
-                req.reason,
-                req.in_flight,
-            )
+            return
+        sockets.pop(req.addr, None)  # stop routing new requests to it
+        logger.info(
+            "Instance %s addr %s is exiting (reason=%s, in_flight=%d).",
+            server_type,
+            req.addr,
+            req.reason,
+            req.in_flight,
+        )
 
     async def _await_with_timeout(
         self,
