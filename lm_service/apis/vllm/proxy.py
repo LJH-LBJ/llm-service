@@ -1060,10 +1060,8 @@ class Proxy(EngineClient):
                 "Exit instance failed, exception: %s" % (e)
             ) from e
 
-        cluster_lock = self._get_cluster_lock(server_type)
-        async with cluster_lock:
-            # stop routing new requests
-            await self.refresh_health_status(worker_addr, server_type)
+        # stop routing new requests
+        await self.refresh_health_status(worker_addr, server_type)
         node_key = (
             f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.name}"
         )
@@ -1083,7 +1081,7 @@ class Proxy(EngineClient):
             )
         # find instance id by addr, stop routing new requests to it
         try:
-            server_type, sockets = self._get_sockets_and_server_types_from_addr(
+            server_type, _ = self._get_sockets_and_server_types_from_addr(
                 req.addr,
                 req.server_type,
             )
@@ -1093,10 +1091,9 @@ class Proxy(EngineClient):
                 req.addr,
             )
             return
-        cluster_lock = self._get_cluster_lock(server_type)
-        async with cluster_lock:
-            # stop routing new requests to it
-            await self.refresh_health_status(req.addr, server_type)
+
+        # stop routing new requests to it
+        await self.refresh_health_status(req.addr, server_type)
         logger.info(
             "Instance %s addr %s is exiting (reason=%s, in_flight=%d).",
             server_type,
