@@ -90,6 +90,8 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
     async def run_health_check_loop(self):
         while True:
             start_time = time.monotonic()
+            # use a snapshot to avoid mutation during iteration
+            snapshot_addrs = list(self._instances.keys())
             tasks = [
                 asyncio.create_task(
                     asyncio.wait_for(
@@ -97,11 +99,11 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
                         timeout=self._health_check_interval,
                     )
                 )
-                for addr in self._instances.keys()
+                for addr in snapshot_addrs
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            for addr, result in zip(self._instances.keys(), results):
+            for addr, result in zip(snapshot_addrs, results):
                 if isinstance(result, bool) and result:
                     self._update_health_counts(addr, True)
                 else:
@@ -162,3 +164,18 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
             for addr, healthy in self._instances_states.items()
             if not healthy
         ]
+
+    def refresh_health_status(self, addr: str):
+        """
+        Remove the instance from tracking when it is exited.
+        """
+        self._instances.pop(addr, None)
+        self._instances_states.pop(addr, None)
+        self._success_count.pop(addr, None)
+        self._fail_count.pop(addr, None)
+        self._update_health_status()
+        logger.info(
+            "ServiceDiscovery(%s) removed instance %s.",
+            self.server_type,
+            addr,
+        )

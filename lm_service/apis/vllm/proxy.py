@@ -953,6 +953,7 @@ class Proxy(EngineClient):
                 "Exit instance failed, exception: %s" % (e)
             ) from e
         sockets.pop(worker_addr, None)  # stop routing new requests
+        self.refresh_health_status(worker_addr, server_type)
         node_key = (
             f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.name}"
         )
@@ -982,6 +983,7 @@ class Proxy(EngineClient):
             )
             return
         sockets.pop(req.addr, None)  # stop routing new requests to it
+        self.refresh_health_status(req.addr, server_type)
         logger.info(
             "Instance %s addr %s is exiting (reason=%s, in_flight=%d).",
             server_type,
@@ -1066,6 +1068,16 @@ class Proxy(EngineClient):
         raise ValueError(
             f"Address {addr} not found in any server type sockets."
         )
+
+    def refresh_health_status(self, addr: str, server_type: ServerType) -> None:
+        if server_type == ServerType.E_INSTANCE:
+            self.encoder_service_discovery.refresh_health_status(addr)
+        elif server_type == ServerType.PD_INSTANCE:
+            self.pd_service_discovery.refresh_health_status(addr)
+        elif server_type == ServerType.P_INSTANCE:
+            self.p_service_discovery.refresh_health_status(addr)
+        elif server_type == ServerType.D_INSTANCE:
+            self.d_service_discovery.refresh_health_status(addr)
 
 
 def _has_mm_data(prompt: PromptType) -> bool:
