@@ -114,5 +114,6 @@ class ExitRequest(msgspec.Struct):
 class ShutdownRequest(msgspec.Struct):
     request_id: str
     addr: str
+    server_type: ServerType
     in_flight: int
     reason: str

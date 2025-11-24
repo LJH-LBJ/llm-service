@@ -803,7 +803,10 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.HEARTBEAT, payload)
-            _, sockets = self._get_sockets_and_server_types_from_addr(addr)
+            _, sockets = self._get_sockets_and_server_types_from_addr(
+                addr,
+                server_type
+            )
             socket = sockets[addr]
 
             await socket.send_multipart(msg, copy=False)
@@ -835,7 +838,10 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.METRICS, payload)
-            _, sockets = self._get_sockets_and_server_types_from_addr(addr)
+            _, sockets = self._get_sockets_and_server_types_from_addr(
+                addr,
+                server_type
+            )
             socket = sockets[addr]
 
             await socket.send_multipart(msg, copy=False)
@@ -961,7 +967,8 @@ class Proxy(EngineClient):
             )
         # find instance id by addr, stop routing new requests to it
         server_type, sockets = self._get_sockets_and_server_types_from_addr(
-            req.addr
+            req.addr,
+            req.server_type
         )
         sockets.pop(req.addr, None)  # stop routing new requests to it
         if server_type is None:
@@ -1035,14 +1042,20 @@ class Proxy(EngineClient):
         raise NotImplementedError
 
     def _get_sockets_and_server_types_from_addr(
-        self, addr: str
+        self, addr: str, server_type: Optional[ServerType] = None
     ) -> tuple[ServerType, dict[str, zmq.asyncio.Socket]]:
-        for server_type, sockets in [
-            (ServerType.PD_INSTANCE, self.to_pd_sockets),
-            (ServerType.P_INSTANCE, self.to_p_sockets),
-            (ServerType.D_INSTANCE, self.to_d_sockets),
-            (ServerType.E_INSTANCE, self.to_encode_sockets),
-        ]:
+        sockets_dict = {
+            ServerType.PD_INSTANCE: self.to_pd_sockets,
+            ServerType.P_INSTANCE: self.to_p_sockets,
+            ServerType.D_INSTANCE: self.to_d_sockets,
+            ServerType.E_INSTANCE: self.to_encode_sockets,
+        }
+        if server_type is None:
+            for stype, sockets in sockets_dict.items():
+                if addr in sockets:
+                    return stype, sockets
+        else:
+            sockets = sockets_dict.get(server_type, {})
             if addr in sockets:
                 return server_type, sockets
         raise ValueError(

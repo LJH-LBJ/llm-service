@@ -334,6 +334,7 @@ class DisaggWorker:
                 ShutdownRequest(
                     request_id=request_id,
                     addr=self.worker_addr,
+                    server_type=self.get_server_type(),
                     in_flight=len(self.running_requests),
                     reason=reason,
                 )
