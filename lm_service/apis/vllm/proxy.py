@@ -329,8 +329,12 @@ class Proxy(EngineClient):
         msg = (RequestType.ENCODE, payload)
         cluster_lock = self._get_cluster_lock(ServerType.E_INSTANCE)
         async with cluster_lock:
-            health_endpoints = self.encoder_service_discovery.get_health_endpoints()
-            request_stats = self.encoder_request_stats_monitor.get_request_stats()
+            health_endpoints = (
+                self.encoder_service_discovery.get_health_endpoints()
+            )
+            request_stats = (
+                self.encoder_request_stats_monitor.get_request_stats()
+            )
             addr = self.encoder_router.route_request(
                 health_endpoints, request_stats
             )
