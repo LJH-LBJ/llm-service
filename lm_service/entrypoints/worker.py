@@ -35,10 +35,6 @@ async def run(args, engine: EngineClient):
         logger.info("Shutdown requested by signal.")
         await worker._shutdown_handler("SIGTERM received")
 
-    loop.add_signal_handler(
-        signal.SIGTERM, lambda: asyncio.create_task(do_graceful_exit())
-    )
-
     worker = DisaggWorker(
         engine=engine,
         address=args.worker_addr,
@@ -47,6 +43,10 @@ async def run(args, engine: EngineClient):
         metastore_client_config=args.metastore_client_config,
         ec_transfer_config=args.ec_transfer_config,
         kv_transfer_config=args.kv_transfer_config,
+    )
+
+    loop.add_signal_handler(
+        signal.SIGTERM, lambda: asyncio.create_task(do_graceful_exit())
     )
 
     try:

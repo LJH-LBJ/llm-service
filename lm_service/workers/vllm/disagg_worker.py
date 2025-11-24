@@ -319,17 +319,19 @@ class DisaggWorker:
             )
         try:
             # Unregister from poller before closing the socket
-            if hasattr(self, "poller"):
-                try:
-                    self.poller.unregister(self.from_proxy)
-                except Exception:
-                    logger.warning(
-                        "Could not unregister from_proxy from poller during shutdown."
-                    )
+            try:
+                self.poller.unregister(self.from_proxy)
+            except Exception:
+                logger.warning(
+                    "Could not unregister from_proxy from poller during shutdown."
+                )
 
             self.from_proxy.close(linger=0)
-        except Exception:
-            logger.error("Error closing from_proxy socket during shutdown.")
+        except Exception as e:
+            logger.error(
+                "Error closing from_proxy socket during shutdown: %s",
+                e, exc_info=True
+            )
 
     # graceful shutdown on SIGTERM
     async def _shutdown_handler(self, reason: str) -> None:

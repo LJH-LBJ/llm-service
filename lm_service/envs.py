@@ -10,6 +10,7 @@ _TRUE_VALUES = {"1", "true", "t", "y", "yes", "on"}
 
 # --8<-- [start:env-vars-definition]
 environment_variables: dict[str, Callable[[], Any]] = {
+    # Enable timecount profiling
     "TIMECOUNT_ENABLED": lambda: os.getenv("TIMECOUNT_ENABLED", "0").lower()
     in _TRUE_VALUES,
     "TRANSFER_PROTOCOL": env_with_choices(
@@ -64,9 +65,12 @@ environment_variables: dict[str, Callable[[], Any]] = {
     "LM_SERVICE_STARTUP_WAIT_TIME": lambda: int(
         os.getenv("LM_SERVICE_STARTUP_WAIT_TIME", "120")
     ),
+    # Timeout in seconds for requests.
     "LM_SERVICE_REQUEST_TIMEOUT_SECONDS": lambda: int(
         os.getenv("LM_SERVICE_REQUEST_TIMEOUT_SECONDS", 120)
     ),
+    # Timeout in seconds for graceful worker shutdown and request cleanup.
+    # Used to control how long a worker waits to finish processing before exiting.
     "LM_SERVICE_WORKER_EXIT_TIMEOUT": lambda: int(
         os.getenv("LM_SERVICE_WORKER_EXIT_TIMEOUT", 5)
     ),

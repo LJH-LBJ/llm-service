@@ -106,11 +106,13 @@ class MetricsResponse(msgspec.Struct):
     metrics: Optional[dict[int, dict[str, Union[int, float]]]]
 
 
+# Sent from proxy to worker to request graceful shutdown
 class ExitRequest(msgspec.Struct):
     request_id: str
     reason: str = "user_exit"
 
 
+# Sent from worker to proxy when shutting down (e.g., on SIGTERM)
 class ShutdownRequest(msgspec.Struct):
     request_id: str
     addr: str

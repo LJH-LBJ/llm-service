@@ -723,7 +723,12 @@ class Proxy(EngineClient):
                     resp = metrics_decoder.decode(payload)
                 elif resp_type == ResponseType.SIGTERM:
                     resp = sigterm_decoder.decode(payload)
-                    asyncio.create_task(self.handle_sigterm_from_worker(resp))
+                    task = asyncio.create_task(self.handle_sigterm_from_worker(resp))
+                    task.add_done_callback(
+                        lambda t: logger.error(
+                            "Exception in handle_sigterm_from_worker: %s", t.exception()
+                        ) if t.exception() is not None and not t.cancelled() else None
+                    )
                 else:
                     raise RuntimeError(
                         f"Unknown response type from worker: {resp_type.decode()}"
@@ -951,10 +956,13 @@ class Proxy(EngineClient):
         node_key = (
             f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.name}"
         )
-        if lm_service_envs.LM_SERVICE_METASTORE_CLIENT is not None and hasattr(
-            self.metastore_client, "delete_metadata"
+        if (
+            lm_service_envs.LM_SERVICE_METASTORE_CLIENT is not None
+            and hasattr(self, "metastore_client")
+            and self.metastore_client is not None
+            and hasattr(self.metastore_client, "delete_metadata")
         ):
-            self.metastore_client.delete_metadata(node_key, addr)
+            self.metastore_client.delete_metadata(node_key, worker_addr)
 
     async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
         # lazy initialization
