@@ -5,6 +5,7 @@ import asyncio
 import uuid
 import json
 
+from lm_service.protocol.protocol import ServerType
 import numpy as np
 from PIL import Image
 
@@ -110,7 +111,8 @@ async def run_single_proxy(proxy_addr):
             for i in range(pd_num):
                 exit_task = asyncio.create_task(
                     asyncio.wait_for(
-                        p.exit_instance(addr=args.pd_addr_list[i]),
+                        p.exit_instance(addr=args.pd_addr_list[i],
+                        server_type=ServerType.PD_INSTANCE),
                         timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
                     )
                 )
