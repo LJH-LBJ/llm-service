@@ -901,7 +901,7 @@ class Proxy(EngineClient):
         finally:
             self.queues.pop(request_id, None)
 
-    async def exit_instance(self, addr: str) -> None:
+    async def exit_instance(self, addr: str, server_type: Optional[ServerType]) -> None:
         """
         request the specified instance to exit gracefully:
         1. add the instance to the draining set (stop routing new requests)
@@ -925,7 +925,7 @@ class Proxy(EngineClient):
             else addr
         )
         server_type, sockets = self._get_sockets_and_server_types_from_addr(
-            worker_addr
+            worker_addr, server_type
         )
         socket = sockets.get(worker_addr, None)
         if socket is None:
