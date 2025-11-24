@@ -35,6 +35,7 @@ from lm_service.protocol.protocol import (
     ResponseType,
     ServerType,
     ShutdownRequest,
+    WorkerRegisterRequest,
 )
 from lm_service.request_stats import RequestStatsMonitor
 from lm_service.routing_logic import (
@@ -297,6 +298,7 @@ class Proxy(EngineClient):
             socket = self.ctx.socket(zmq.constants.PUSH)
             socket.connect(addr)
             to_sockets[addr] = socket
+            logger.info(f"Connected to worker {addr} success")
         return to_sockets
 
     async def _run_encode(
@@ -581,6 +583,8 @@ class Proxy(EngineClient):
         )
 
         try:
+            proxy_ttft_start: float = time.perf_counter()
+            ttft_recorded_flag: bool = False
             # need to validate to avoid decode failed later
             req_dict = msgspec.to_builtins(request)
             request = msgspec.convert(req_dict, GenerationRequest, strict=True)
@@ -594,10 +598,20 @@ class Proxy(EngineClient):
             if self.is_pd_merged:
                 async for pd_response in self._run_pd(request, q):
                     yield self._to_request_output(pd_response)
+                    ttft_recorded_flag = self.pd_metrics_logger.cal_proxy_ttft(
+                        ttft_recorded_flag,
+                        proxy_ttft_start,
+                        pd_response,
+                    )
             else:
                 await self._run_prefill(request, q)
                 async for d_response in self._run_decode(request, q):
                     yield self._to_request_output(d_response)
+                    ttft_recorded_flag = self.d_metrics_logger.cal_proxy_ttft(
+                        ttft_recorded_flag,
+                        proxy_ttft_start,
+                        d_response,
+                    )
 
         except msgspec.ValidationError as e:
             raise RuntimeError(f"Invalid Parameters: {e}.") from e
@@ -643,6 +657,38 @@ class Proxy(EngineClient):
                 )
             )
 
+    async def _worker_register_handler(
+        self, worker_register_req: WorkerRegisterRequest
+    ):
+        """Handle worker register request."""
+        address = worker_register_req.address
+        server_type = worker_register_req.server_type
+
+        SERVER_TYPE_TO_SOCKET_MAP = {
+            ServerType.E_INSTANCE: self.to_encode_sockets,
+            ServerType.PD_INSTANCE: self.to_pd_sockets,
+            ServerType.P_INSTANCE: self.to_p_sockets,
+            ServerType.D_INSTANCE: self.to_d_sockets,
+        }
+        if server_type in SERVER_TYPE_TO_SOCKET_MAP:
+            socket_dict = SERVER_TYPE_TO_SOCKET_MAP[server_type]
+            if address not in socket_dict:
+                try:
+                    socket = self.ctx.socket(zmq.constants.PUSH)
+                    socket.connect(address)
+                    socket_dict[address] = socket
+                except zmq.ZMQError as e:
+                    logger.error(
+                        f"Failed to connect to worker {address} with error: {e}"
+                    )
+        else:
+            logger.error(
+                f"_worker_register_handler fail, unknown server type {server_type}"
+            )
+            return
+
+        logger.info(f"Connected to worker {address} success")
+
     async def _run_output_handler(self) -> None:
         """Background task to pull responses and dispatch to request queues.
 
@@ -657,6 +703,7 @@ class Proxy(EngineClient):
         heartbeat_decoder = msgspec.msgpack.Decoder(HeartbeatResponse)
         metrics_decoder = msgspec.msgpack.Decoder(MetricsResponse)
         sigterm_decoder = msgspec.msgpack.Decoder(ShutdownRequest)
+        worker_register_decoder = msgspec.msgpack.Decoder(WorkerRegisterRequest)
         try:
             socket = self.ctx.socket(zmq.constants.PULL)
             socket.bind(self.proxy_addr)
@@ -707,6 +754,7 @@ class Proxy(EngineClient):
                     FailureResponse,
                     MetricsResponse,
                     ShutdownRequest,
+                    WorkerRegisterRequest,
                 ]
                 # TODO: maybe we can have a mapping from resp_type to prefill
                 if resp_type in (
@@ -729,6 +777,9 @@ class Proxy(EngineClient):
                             "Exception in handle_sigterm_from_worker: %s", t.exception()
                         ) if t.exception() is not None and not t.cancelled() else None
                     )
+                elif resp_type == RequestType.REGISTER:
+                    resp = worker_register_decoder.decode(payload)
+                    asyncio.create_task(self._worker_register_handler(resp))
                 else:
                     raise RuntimeError(
                         f"Unknown response type from worker: {resp_type.decode()}"
@@ -739,6 +790,7 @@ class Proxy(EngineClient):
                         ResponseType.HEARTBEAT,
                         ResponseType.METRICS,
                         ResponseType.SIGTERM,
+                        RequestType.REGISTER,
                     ):
                         logger.warning(
                             "Request %s may have been aborted, ignore response.",
@@ -856,36 +908,38 @@ class Proxy(EngineClient):
             ):
                 # calculate proxy to pd/encode time average
                 # add to metrics
-                proxy2encode_avg = (
-                    self.encoder_metrics_logger.get_avg_proxy_to_instance_time(
+                proxy_ttft_avg: float = 0.0
+                if server_type == ServerType.E_INSTANCE:
+                    proxy2instance_avg = self.encoder_metrics_logger.get_avg_proxy_to_instance_time(
                         addr
                     )
-                )
+                elif server_type == ServerType.PD_INSTANCE:
+                    proxy2instance_avg = (
+                        self.pd_metrics_logger.get_avg_proxy_to_instance_time(
+                            addr
+                        )
+                    )
+                    proxy_ttft_avg = self.pd_metrics_logger.get_avg_proxy_ttft()
+                elif server_type == ServerType.P_INSTANCE:
+                    proxy2instance_avg = (
+                        self.p_metrics_logger.get_avg_proxy_to_instance_time(
+                            addr
+                        )
+                    )
+                elif server_type == ServerType.D_INSTANCE:
+                    proxy2instance_avg = (
+                        self.d_metrics_logger.get_avg_proxy_to_instance_time(
+                            addr
+                        )
+                    )
+                    proxy_ttft_avg = self.d_metrics_logger.get_avg_proxy_ttft()
                 for engine_id in response.metrics:
-                    if self.is_pd_merged:
-                        proxy2pd_avg = self.pd_metrics_logger.get_avg_proxy_to_instance_time(
-                            addr
-                        )
-                        response.metrics[engine_id].update(
-                            {
-                                "proxy_to_encode_time_avg": proxy2encode_avg,
-                                "proxy_to_pd_time_avg": proxy2pd_avg,
-                            }
-                        )
-                    else:
-                        proxy2p_avg = self.p_metrics_logger.get_avg_proxy_to_instance_time(
-                            addr
-                        )
-                        proxy2d_avg = self.d_metrics_logger.get_avg_proxy_to_instance_time(
-                            addr
-                        )
-                        response.metrics[engine_id].update(
-                            {
-                                "proxy_to_encode_time_avg": proxy2encode_avg,
-                                "proxy_to_p_time_avg": proxy2p_avg,
-                                "proxy_to_d_time_avg": proxy2d_avg,
-                            }
-                        )
+                    response.metrics[engine_id].update(
+                        {
+                            "proxy_to_instance_time_avg": proxy2instance_avg,  # type: ignore
+                            "proxy_ttft_avg": proxy_ttft_avg,  # type: ignore
+                        }
+                    )
 
                 return response.metrics
             elif isinstance(response, Exception):

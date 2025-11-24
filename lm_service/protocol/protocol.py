@@ -29,7 +29,8 @@ class RequestType:
     HEARTBEAT = b"\x03"
     METRICS = b"\x04"
     PREFILL = b"\x05"
-    EXIT = b"\x06"
+    REGISTER = b"\x06"
+    EXIT = b"\x07"
 
 
 class PDAbortRequest(msgspec.Struct):
@@ -43,7 +44,8 @@ class ResponseType:
     HEARTBEAT = b"\x03"
     METRICS = b"\x04"
     PREFILL = b"\x05"
-    SIGTERM = b"\x06"
+    REGISTER = b"\x06"
+    SIGTERM = b"\x07"
 
 
 class GenerationResponse(msgspec.Struct):
@@ -59,7 +61,7 @@ class GenerationResponse(msgspec.Struct):
 
     @classmethod
     def from_request_output(
-        self, request_output: RequestOutput
+        cls, request_output: RequestOutput
     ) -> "GenerationResponse":
         assert len(request_output.outputs) == 1, "Only support N=1 right now."
         out = request_output.outputs[0]
@@ -119,3 +121,9 @@ class ShutdownRequest(msgspec.Struct):
     server_type: ServerType
     in_flight: int
     reason: str
+
+
+class WorkerRegisterRequest(msgspec.Struct):
+    request_id: str
+    server_type: ServerType
+    address: str
