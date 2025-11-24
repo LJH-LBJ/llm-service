@@ -1035,7 +1035,8 @@ class Proxy(EngineClient):
         # find instance id by addr, stop routing new requests to it
         try:
             server_type, sockets = self._get_sockets_and_server_types_from_addr(
-                req.addr
+                req.addr,
+                req.server_type,
             )
         except ValueError:
             logger.warning(
