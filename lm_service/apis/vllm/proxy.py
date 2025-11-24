@@ -804,8 +804,7 @@ class Proxy(EngineClient):
             payload = self.encoder.encode(request)
             msg = (RequestType.HEARTBEAT, payload)
             _, sockets = self._get_sockets_and_server_types_from_addr(
-                addr,
-                server_type
+                addr, server_type
             )
             socket = sockets[addr]
 
@@ -839,8 +838,7 @@ class Proxy(EngineClient):
             payload = self.encoder.encode(request)
             msg = (RequestType.METRICS, payload)
             _, sockets = self._get_sockets_and_server_types_from_addr(
-                addr,
-                server_type
+                addr, server_type
             )
             socket = sockets[addr]
 
@@ -953,9 +951,8 @@ class Proxy(EngineClient):
         node_key = (
             f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.name}"
         )
-        if (
-            lm_service_envs.LM_SERVICE_METASTORE_CLIENT is not None
-            and hasattr(self.metastore_client, "delete_metadata")
+        if lm_service_envs.LM_SERVICE_METASTORE_CLIENT is not None and hasattr(
+            self.metastore_client, "delete_metadata"
         ):
             self.metastore_client.delete_metadata(node_key, addr)
 

@@ -323,7 +323,9 @@ class DisaggWorker:
                 try:
                     self.poller.unregister(self.from_proxy)
                 except Exception:
-                    logger.warning("Could not unregister from_proxy from poller during shutdown.")
+                    logger.warning(
+                        "Could not unregister from_proxy from poller during shutdown."
+                    )
 
             self.from_proxy.close(linger=0)
         except Exception:
