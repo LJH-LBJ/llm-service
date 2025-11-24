@@ -1130,7 +1130,9 @@ class Proxy(EngineClient):
             f"Address {addr} not found in any server type sockets."
         )
 
-    async def refresh_health_status(self, addr: str, server_type: ServerType) -> None:
+    async def refresh_health_status(
+            self, addr: str, server_type: ServerType
+    ) -> None:
         if server_type == ServerType.E_INSTANCE:
             await self.encoder_service_discovery.refresh_health_status(addr)
         elif server_type == ServerType.PD_INSTANCE:
