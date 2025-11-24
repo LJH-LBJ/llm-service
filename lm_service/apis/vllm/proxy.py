@@ -771,11 +771,16 @@ class Proxy(EngineClient):
                     resp = metrics_decoder.decode(payload)
                 elif resp_type == ResponseType.SIGTERM:
                     resp = sigterm_decoder.decode(payload)
-                    task = asyncio.create_task(self.handle_sigterm_from_worker(resp))
+                    task = asyncio.create_task(
+                        self.handle_sigterm_from_worker(resp)
+                    )
                     task.add_done_callback(
                         lambda t: logger.error(
-                            "Exception in handle_sigterm_from_worker: %s", t.exception()
-                        ) if t.exception() is not None and not t.cancelled() else None
+                            "Exception in handle_sigterm_from_worker: %s",
+                            t.exception(),
+                        )
+                        if t.exception() is not None and not t.cancelled()
+                        else None
                     )
                 elif resp_type == RequestType.REGISTER:
                     resp = worker_register_decoder.decode(payload)
@@ -955,7 +960,9 @@ class Proxy(EngineClient):
         finally:
             self.queues.pop(request_id, None)
 
-    async def exit_instance(self, addr: str, server_type: Optional[ServerType]=None) -> None:
+    async def exit_instance(
+        self, addr: str, server_type: Optional[ServerType] = None
+    ) -> None:
         """
         request the specified instance to exit gracefully:
         1. add the instance to the draining set (stop routing new requests)

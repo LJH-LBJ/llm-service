@@ -6,7 +6,6 @@ import os
 import time
 import uuid
 from typing import Any, Optional, Union
-import uuid
 
 import msgspec
 import numpy as np
@@ -353,7 +352,8 @@ class DisaggWorker:
         except Exception as e:
             logger.error(
                 "Error closing from_proxy socket during shutdown: %s",
-                e, exc_info=True
+                e,
+                exc_info=True,
             )
 
     # graceful shutdown on SIGTERM
