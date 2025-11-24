@@ -54,6 +54,7 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
         health_check_interval: float,
         health_threshold: int,
         health_check_func,
+        lock: asyncio.Lock,
     ):
         self.server_type = server_type
         self._instances = instances
@@ -67,7 +68,7 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
         self._fail_count: dict[str, int] = defaultdict(lambda: 0)
         self._health_check_func = health_check_func
         self._health_monitor_handler = None
-        self._lock = asyncio.Lock()
+        self._lock = lock
 
     def should_launch_health_monitor(self) -> bool:
         return (
@@ -118,8 +119,8 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
                         if isinstance(result, asyncio.TimeoutError)
                         else result,
                     )
-
-            self._update_health_status()
+            async with self._lock:
+                self._update_health_status()
 
             elapsed = time.monotonic() - start_time
             sleep_time = max(0, self._health_check_interval - elapsed)
@@ -167,12 +168,17 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
             if not healthy
         ]
 
-    async def refresh_health_status(self, addr: str):
+    async def remove_instance(self, addr: str):
         """
         Remove the instance from tracking when it is exited.
         """
         async with self._lock:
-            self._instances.pop(addr, None)
+            sock = self._instances.pop(addr, None)
+            if sock:
+                try:
+                    sock.close(linger=0)
+                except Exception:
+                    logger.warning("Failed closing socket %s.", addr)
             self._instances_states.pop(addr, None)
             self._success_count.pop(addr, None)
             self._fail_count.pop(addr, None)

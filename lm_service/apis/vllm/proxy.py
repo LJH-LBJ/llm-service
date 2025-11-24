@@ -102,6 +102,11 @@ class Proxy(EngineClient):
         self.to_pd_sockets: dict[str, zmq.asyncio.Socket] = {}
         self.to_p_sockets: dict[str, zmq.asyncio.Socket] = {}
         self.to_d_sockets: dict[str, zmq.asyncio.Socket] = {}
+        # Cluster locks for managing access to socket dictionaries
+        self._encode_cluster_lock = asyncio.Lock()
+        self._pd_cluster_lock = asyncio.Lock()
+        self._p_cluster_lock = asyncio.Lock()
+        self._d_cluster_lock = asyncio.Lock()
         self.enable_health_monitor = enable_health_monitor
         self.health_check_interval = health_check_interval
         self.health_threshold = health_threshold
@@ -242,6 +247,7 @@ class Proxy(EngineClient):
             health_check_interval=self.health_check_interval,
             health_threshold=self.health_threshold,
             health_check_func=self.check_health,
+            lock=self._get_cluster_lock(engine_type),
         )
         metrics_logger = MetricsReporter(
             server_type=engine_type,
@@ -321,16 +327,19 @@ class Proxy(EngineClient):
             raise RuntimeError("Failed to serialize GenerationRequest") from e
 
         msg = (RequestType.ENCODE, payload)
-        health_endpoints = self.encoder_service_discovery.get_health_endpoints()
-        request_stats = self.encoder_request_stats_monitor.get_request_stats()
-        addr = self.encoder_router.route_request(
-            health_endpoints, request_stats
-        )
-        self.encoder_request_stats_monitor.on_new_request(
-            addr, request_id=request.request_id
-        )
-        try:
+        cluster_lock = self._get_cluster_lock(ServerType.E_INSTANCE)
+        async with cluster_lock:
+            health_endpoints = self.encoder_service_discovery.get_health_endpoints()
+            request_stats = self.encoder_request_stats_monitor.get_request_stats()
+            addr = self.encoder_router.route_request(
+                health_endpoints, request_stats
+            )
+            self.encoder_request_stats_monitor.on_new_request(
+                addr, request_id=request.request_id
+            )
             socket = self.to_encode_sockets[addr]
+
+        try:
             if lm_service_envs.TIMECOUNT_ENABLED:
                 proxy_to_encode_time_start = time.perf_counter()
             await socket.send_multipart(msg, copy=False)
@@ -343,7 +352,7 @@ class Proxy(EngineClient):
                 self.encoder_metrics_logger.add_proxy_to_instance_time(
                     addr,
                     response.proxy_to_worker_time_end
-                    - proxy_to_encode_time_start,
+                    - proxy_to_encode_time_start,  # type: ignore
                 )
 
             if isinstance(response, Exception):
@@ -373,15 +382,17 @@ class Proxy(EngineClient):
             raise RuntimeError("Failed to serialize GenerationRequest") from e
 
         msg = (RequestType.GENERATION, payload)
-        health_endpoints = self.pd_service_discovery.get_health_endpoints()
-        request_stats = self.pd_request_stats_monitor.get_request_stats()
-        addr = self.pd_router.route_request(health_endpoints, request_stats)
-        self.pd_request_stats_monitor.on_new_request(
-            addr, request_id=request.request_id
-        )
+        cluster_lock = self._get_cluster_lock(ServerType.PD_INSTANCE)
+        async with cluster_lock:
+            health_endpoints = self.pd_service_discovery.get_health_endpoints()
+            request_stats = self.pd_request_stats_monitor.get_request_stats()
+            addr = self.pd_router.route_request(health_endpoints, request_stats)
+            self.pd_request_stats_monitor.on_new_request(
+                addr, request_id=request.request_id
+            )
+            socket = self.to_pd_sockets[addr]
 
         try:
-            socket = self.to_pd_sockets[addr]
             if lm_service_envs.TIMECOUNT_ENABLED:
                 proxy_to_pd_time_start = time.perf_counter()
             await socket.send_multipart(msg, copy=False)
@@ -676,11 +687,23 @@ class Proxy(EngineClient):
                 try:
                     socket = self.ctx.socket(zmq.constants.PUSH)
                     socket.connect(address)
-                    socket_dict[address] = socket
                 except zmq.ZMQError as e:
                     logger.error(
                         f"Failed to connect to worker {address} with error: {e}"
                     )
+                    return
+
+                cluster_lock = self._get_cluster_lock(server_type)
+                async with cluster_lock:
+                    if address in socket_dict:
+                        socket.close(linger=0)
+                        logger.info(
+                            f"Worker {address} already registered, ignore."
+                        )
+                        return
+                    else:
+                        socket_dict[address] = socket
+
         else:
             logger.error(
                 f"_worker_register_handler fail, unknown server type {server_type}"
@@ -865,10 +888,17 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.HEARTBEAT, payload)
-            _, sockets = self._get_sockets_and_server_types_from_addr(
-                addr, server_type
-            )
-            socket = sockets[addr]
+            cluster_lock = self._get_cluster_lock(server_type)
+            async with cluster_lock:
+                try:
+                    _, sockets = self._get_sockets_and_server_types_from_addr(
+                        addr, server_type
+                    )
+                    socket = sockets.get(addr)
+                except ValueError:
+                    socket = None
+            if socket is None:
+                return None
 
             await socket.send_multipart(msg, copy=False)
             response = await q.get()
@@ -899,11 +929,19 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.METRICS, payload)
-            _, sockets = self._get_sockets_and_server_types_from_addr(
-                addr, server_type
-            )
-            socket = sockets[addr]
 
+            cluster_lock = self._get_cluster_lock(server_type)
+            async with cluster_lock:
+                try:
+                    _, sockets = self._get_sockets_and_server_types_from_addr(
+                        addr, server_type
+                    )
+                    socket = sockets.get(addr)
+                except ValueError:
+                    socket = None
+
+            if socket is None:
+                return None
             await socket.send_multipart(msg, copy=False)
             response = await q.get()
             # calculate proxy to pd/encode time
@@ -1013,8 +1051,11 @@ class Proxy(EngineClient):
             raise RuntimeError(
                 "Exit instance failed, exception: %s" % (e)
             ) from e
-        sockets.pop(worker_addr, None)  # stop routing new requests
-        await self.refresh_health_status(worker_addr, server_type)
+
+        cluster_lock = self._get_cluster_lock(server_type)
+        async with cluster_lock:
+            # stop routing new requests
+            await self.refresh_health_status(worker_addr, server_type)
         node_key = (
             f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.name}"
         )
@@ -1044,8 +1085,10 @@ class Proxy(EngineClient):
                 req.addr,
             )
             return
-        sockets.pop(req.addr, None)  # stop routing new requests to it
-        await self.refresh_health_status(req.addr, server_type)
+        cluster_lock = self._get_cluster_lock(server_type)
+        async with cluster_lock:
+            # stop routing new requests to it
+            await self.refresh_health_status(req.addr, server_type)
         logger.info(
             "Instance %s addr %s is exiting (reason=%s, in_flight=%d).",
             server_type,
@@ -1131,17 +1174,28 @@ class Proxy(EngineClient):
             f"Address {addr} not found in any server type sockets."
         )
 
+    def _get_cluster_lock(self, server_type: ServerType) -> asyncio.Lock:
+        if server_type == ServerType.E_INSTANCE:
+            return self._encode_cluster_lock
+        if server_type == ServerType.PD_INSTANCE:
+            return self._pd_cluster_lock
+        if server_type == ServerType.P_INSTANCE:
+            return self._p_cluster_lock
+        if server_type == ServerType.D_INSTANCE:
+            return self._d_cluster_lock
+        raise ValueError(f"No lock for server type {server_type}")
+
     async def refresh_health_status(
         self, addr: str, server_type: ServerType
     ) -> None:
         if server_type == ServerType.E_INSTANCE:
-            await self.encoder_service_discovery.refresh_health_status(addr)
+            await self.encoder_service_discovery.remove_instance(addr)
         elif server_type == ServerType.PD_INSTANCE:
-            await self.pd_service_discovery.refresh_health_status(addr)
+            await self.pd_service_discovery.remove_instance(addr)
         elif server_type == ServerType.P_INSTANCE:
-            await self.p_service_discovery.refresh_health_status(addr)
+            await self.p_service_discovery.remove_instance(addr)
         elif server_type == ServerType.D_INSTANCE:
-            await self.d_service_discovery.refresh_health_status(addr)
+            await self.d_service_discovery.remove_instance(addr)
 
 
 def _has_mm_data(prompt: PromptType) -> bool:
