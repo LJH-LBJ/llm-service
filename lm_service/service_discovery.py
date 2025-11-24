@@ -172,19 +172,18 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
         """
         Remove the instance from tracking when it is exited.
         """
-        async with self._lock:
-            sock = self._instances.pop(addr, None)
-            if sock:
-                try:
-                    sock.close(linger=0)
-                except Exception:
-                    logger.warning("Failed closing socket %s.", addr)
-            self._instances_states.pop(addr, None)
-            self._success_count.pop(addr, None)
-            self._fail_count.pop(addr, None)
-            self._update_health_status()
-            logger.info(
-                "ServiceDiscovery(%s) removed instance %s.",
-                self.server_type,
-                addr,
-            )
+        sock = self._instances.pop(addr, None)
+        if sock:
+            try:
+                sock.close(linger=0)
+            except Exception:
+                logger.warning("Failed closing socket %s.", addr)
+        self._instances_states.pop(addr, None)
+        self._success_count.pop(addr, None)
+        self._fail_count.pop(addr, None)
+        self._update_health_status()
+        logger.info(
+            "ServiceDiscovery(%s) removed instance %s.",
+            self.server_type,
+            addr,
+        )

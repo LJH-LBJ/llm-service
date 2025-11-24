@@ -441,15 +441,17 @@ class Proxy(EngineClient):
             raise RuntimeError("Failed to serialize GenerationRequest") from e
 
         msg = (RequestType.PREFILL, payload)
-        health_endpoints = self.p_service_discovery.get_health_endpoints()
-        request_stats = self.p_request_stats_monitor.get_request_stats()
-        addr = self.p_router.route_request(health_endpoints, request_stats)
-        self.p_request_stats_monitor.on_new_request(
-            addr, request_id=request.request_id
-        )
+        cluster_lock = self._get_cluster_lock(ServerType.P_INSTANCE)
+        async with cluster_lock:
+            health_endpoints = self.p_service_discovery.get_health_endpoints()
+            request_stats = self.p_request_stats_monitor.get_request_stats()
+            addr = self.p_router.route_request(health_endpoints, request_stats)
+            self.p_request_stats_monitor.on_new_request(
+                addr, request_id=request.request_id
+            )
+            socket = self.to_p_sockets[addr]
 
         try:
-            socket = self.to_p_sockets[addr]
             if lm_service_envs.TIMECOUNT_ENABLED:
                 proxy_to_p_time_start = time.perf_counter()
             await socket.send_multipart(msg, copy=False)
@@ -490,15 +492,17 @@ class Proxy(EngineClient):
             raise RuntimeError("Failed to serialize GenerationRequest") from e
 
         msg = (RequestType.GENERATION, payload)
-        health_endpoints = self.d_service_discovery.get_health_endpoints()
-        request_stats = self.d_request_stats_monitor.get_request_stats()
-        addr = self.d_router.route_request(health_endpoints, request_stats)
-        self.d_request_stats_monitor.on_new_request(
-            addr, request_id=request.request_id
-        )
+        cluster_lock = self._get_cluster_lock(ServerType.D_INSTANCE)
+        async with cluster_lock:
+            health_endpoints = self.d_service_discovery.get_health_endpoints()
+            request_stats = self.d_request_stats_monitor.get_request_stats()
+            addr = self.d_router.route_request(health_endpoints, request_stats)
+            self.d_request_stats_monitor.on_new_request(
+                addr, request_id=request.request_id
+            )
+            socket = self.to_d_sockets[addr]
 
         try:
-            socket = self.to_d_sockets[addr]
             if lm_service_envs.TIMECOUNT_ENABLED:
                 proxy_to_d_time_start = time.perf_counter()
             await socket.send_multipart(msg, copy=False)
