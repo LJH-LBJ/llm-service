@@ -896,15 +896,12 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.HEARTBEAT, payload)
-            cluster_lock = self._get_cluster_lock(server_type)
-            async with cluster_lock:
-                try:
-                    _, sockets = self._get_sockets_and_server_types_from_addr(
-                        addr, server_type
-                    )
-                    socket = sockets.get(addr)
-                except ValueError:
-                    socket = None
+            try:
+                socket = await self._get_socket_and_server_types_from_addr(
+                    addr, server_type
+                )
+            except ValueError:
+                socket = None
             if socket is None:
                 return None
 
@@ -938,15 +935,12 @@ class Proxy(EngineClient):
             payload = self.encoder.encode(request)
             msg = (RequestType.METRICS, payload)
 
-            cluster_lock = self._get_cluster_lock(server_type)
-            async with cluster_lock:
-                try:
-                    _, sockets = self._get_sockets_and_server_types_from_addr(
-                        addr, server_type
-                    )
-                    socket = sockets.get(addr)
-                except ValueError:
-                    socket = None
+            try:
+                socket = await self._get_socket_and_server_types_from_addr(
+                    addr, server_type
+                )
+            except ValueError:
+                socket = None
 
             if socket is None:
                 return None
@@ -1007,7 +1001,7 @@ class Proxy(EngineClient):
             self.queues.pop(request_id, None)
 
     async def exit_instance(
-        self, addr: str, server_type: Optional[ServerType] = None
+        self, addr: str, server_type: ServerType,
     ) -> None:
         """
         request the specified instance to exit gracefully:
@@ -1031,10 +1025,13 @@ class Proxy(EngineClient):
             if not addr.startswith(self.transfer_protocol)
             else addr
         )
-        server_type, sockets = self._get_sockets_and_server_types_from_addr(
-            worker_addr, server_type
-        )
-        socket = sockets.get(worker_addr, None)
+        try:
+            socket = await self._get_socket_and_server_types_from_addr(
+                worker_addr, server_type
+            )
+        except ValueError:
+                socket = None
+
         if socket is None:
             logger.warning(
                 "Exit instance failed for %s, addr %s not found.",
@@ -1079,18 +1076,7 @@ class Proxy(EngineClient):
             self.output_handler = asyncio.create_task(
                 self._run_output_handler()
             )
-        # find instance id by addr, stop routing new requests to it
-        try:
-            server_type, _ = self._get_sockets_and_server_types_from_addr(
-                req.addr,
-                req.server_type,
-            )
-        except ValueError:
-            logger.warning(
-                "Instance addr %s not found.",
-                req.addr,
-            )
-            return
+        server_type = req.server_type
 
         # stop routing new requests to it
         await self.refresh_health_status(req.addr, server_type)
@@ -1158,23 +1144,21 @@ class Proxy(EngineClient):
     async def reset_mm_cache(self) -> None:
         raise NotImplementedError
 
-    def _get_sockets_and_server_types_from_addr(
-        self, addr: str, server_type: Optional[ServerType] = None
-    ) -> tuple[ServerType, dict[str, zmq.asyncio.Socket]]:
+    async def _get_socket_and_server_types_from_addr(
+        self, addr: str, server_type: ServerType,
+    ) -> zmq.asyncio.Socket:
         sockets_dict = {
             ServerType.PD_INSTANCE: self.to_pd_sockets,
             ServerType.P_INSTANCE: self.to_p_sockets,
             ServerType.D_INSTANCE: self.to_d_sockets,
             ServerType.E_INSTANCE: self.to_encode_sockets,
         }
-        if server_type is None:
-            for stype, sockets in sockets_dict.items():
-                if addr in sockets:
-                    return stype, sockets
-        else:
+        cluster_lock = self._get_cluster_lock(server_type)
+        async with cluster_lock:
             sockets = sockets_dict.get(server_type, {})
-            if addr in sockets:
-                return server_type, sockets
+            socket = sockets.get(addr, None)
+        if socket:
+            return socket
         raise ValueError(
             f"Address {addr} not found in any server type sockets."
         )
