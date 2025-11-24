@@ -1131,7 +1131,7 @@ class Proxy(EngineClient):
         )
 
     async def refresh_health_status(
-            self, addr: str, server_type: ServerType
+        self, addr: str, server_type: ServerType
     ) -> None:
         if server_type == ServerType.E_INSTANCE:
             await self.encoder_service_discovery.refresh_health_status(addr)
