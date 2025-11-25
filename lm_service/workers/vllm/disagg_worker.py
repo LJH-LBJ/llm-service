@@ -206,6 +206,7 @@ class DisaggWorker:
                         await self.engine.do_log_stats()
                 except asyncio.CancelledError:
                     pass
+
             self._force_log_task = asyncio.create_task(
                 _force_log(), name="force_log"
             )
