@@ -325,7 +325,7 @@ class DisaggWorker:
             return
         # set stopping flag to exit busy loop
         self.stopping = True
-        
+
         # wait for all running requests to finish
         pending = {t for t in self.running_requests if not t.done()}
         if pending:
@@ -339,11 +339,11 @@ class DisaggWorker:
                     "Some tasks did not finish cleanup in %s.",
                     lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
                 )
-                not_done = pending
+                not_done_left = pending
             else:
-                not_done = not_done
+                not_done_left = not_done
             # cancel all running requests
-            for t in not_done:
+            for t in not_done_left:
                 t.cancel()
         try:
             # Unregister from poller before closing the socket
