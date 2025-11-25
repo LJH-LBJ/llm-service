@@ -5,7 +5,6 @@ import asyncio
 import uuid
 import json
 
-from lm_service.protocol.protocol import ServerType
 import numpy as np
 from PIL import Image
 
@@ -13,6 +12,7 @@ from vllm import SamplingParams
 import vllm.envs as envs
 from lm_service.apis.vllm.proxy import Proxy
 import lm_service.envs as lm_service_envs
+from lm_service.protocol.protocol import ServerType
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--proxy-addr", required=False, help="Proxy address")
