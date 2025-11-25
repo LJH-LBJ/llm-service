@@ -325,20 +325,26 @@ class DisaggWorker:
             return
         # set stopping flag to exit busy loop
         self.stopping = True
-        # cancel all running requests
-        for t in list(self.running_requests):
-            t.cancel()
+        
         # wait for all running requests to finish
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*self.running_requests, return_exceptions=True),
-                timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
-            )
-        except asyncio.TimeoutError:
-            logger.warning(
-                "Some tasks did not finish cleanup in %s.",
-                lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
-            )
+        pending = {t for t in self.running_requests if not t.done()}
+        if pending:
+            try:
+                _, not_done = await asyncio.wait(
+                    pending,
+                    timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
+                )
+            except Exception:
+                logger.warning(
+                    "Some tasks did not finish cleanup in %s.",
+                    lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
+                )
+                not_done = pending
+            else:
+                not_done = not_done
+            # cancel all running requests
+            for t in not_done:
+                t.cancel()
         try:
             # Unregister from poller before closing the socket
             try:
