@@ -1001,7 +1001,9 @@ class Proxy(EngineClient):
             self.queues.pop(request_id, None)
 
     async def exit_instance(
-        self, addr: str, server_type: ServerType,
+        self,
+        addr: str,
+        server_type: ServerType,
     ) -> None:
         """
         request the specified instance to exit gracefully:
@@ -1030,7 +1032,7 @@ class Proxy(EngineClient):
                 worker_addr, server_type
             )
         except ValueError:
-                socket = None
+            socket = None
 
         if socket is None:
             logger.warning(
@@ -1145,7 +1147,9 @@ class Proxy(EngineClient):
         raise NotImplementedError
 
     async def _get_socket_and_server_types_from_addr(
-        self, addr: str, server_type: ServerType,
+        self,
+        addr: str,
+        server_type: ServerType,
     ) -> zmq.asyncio.Socket:
         sockets_dict = {
             ServerType.PD_INSTANCE: self.to_pd_sockets,

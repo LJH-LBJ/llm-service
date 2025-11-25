@@ -104,6 +104,7 @@ async def run_single_proxy(proxy_addr):
             # wait for logging
             await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
             asyncio.create_task(p.log_metrics())
+            await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
         # test for exit_instance
         exit_tasks = []
         if args.pd_addr_list:

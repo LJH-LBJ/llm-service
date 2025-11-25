@@ -90,9 +90,6 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
     async def run_health_check_loop(self):
         while True:
             start_time = time.monotonic()
-            # Acquire lock to get the current instance addresses
-            async with self._lock:
-                lock_addrs = list(self._instances.keys())
             tasks = [
                 asyncio.create_task(
                     asyncio.wait_for(
@@ -100,11 +97,11 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
                         timeout=self._health_check_interval,
                     )
                 )
-                for addr in lock_addrs
+                for addr in self._instances.keys()
             ]
             results = await asyncio.gather(*tasks, return_exceptions=True)
 
-            for addr, result in zip(lock_addrs, results):
+            for addr, result in zip(self._instances.keys(), results):
                 if isinstance(result, bool) and result:
                     self._update_health_counts(addr, True)
                 else:
