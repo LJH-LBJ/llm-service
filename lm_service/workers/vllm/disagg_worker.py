@@ -129,6 +129,7 @@ class DisaggWorker:
         self.poller = zmq.asyncio.Poller()
         self._force_log_task: Optional[asyncio.Task] = None
         self._exit_done_event = asyncio.Event()
+        self._exit_started = False
 
     def shutdown(self):
         for socket in self.to_proxy.values():
@@ -199,10 +200,12 @@ class DisaggWorker:
         if lm_service_envs.TIMECOUNT_ENABLED:
             # log engine stats (logger stats and EPD stats (if enabled))
             async def _force_log():
-                while True:
-                    await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
-                    await self.engine.do_log_stats()
-
+                try:
+                    while True:
+                        await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
+                        await self.engine.do_log_stats()
+                except asyncio.CancelledError:
+                    pass
             self._force_log_task = asyncio.create_task(
                 _force_log(), name="force_log"
             )
@@ -322,58 +325,63 @@ class DisaggWorker:
 
     # handle exit request from proxy and do graceful shutdown on SIGTERM
     async def _exit_handler(self) -> None:
-        if self.stopping:
+        if getattr(self, "_exit_started", False):
             return
         # set stopping flag to exit busy loop
-        self.stopping = True
+        self._exit_started = True
+        if not self.stopping:
+            self.stopping = True
         # cancel force log task
-        log_task = getattr(self, "_force_log_task", None)
-        if log_task:
-            log_task.cancel()
-            try:
-                await asyncio.wait_for(log_task, timeout=1)
-            except Exception:
-                pass
-            self.running_requests.discard(log_task)
-            self._force_log_task = None
-            logger.info("Force log task cancelled during shutdown.")
-        # wait for all running requests to finish
-        pending = {t for t in self.running_requests if not t.done()}
-        if pending:
-            try:
-                _, not_done = await asyncio.wait(
-                    pending,
-                    timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
-                )
-            except Exception:
-                logger.warning(
-                    "Some tasks did not finish cleanup in %s.",
-                    lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
-                )
-                not_done_left = pending
-            else:
-                not_done_left = not_done
-            # cancel all running requests
-            for t in not_done_left:
-                t.cancel()
-        self._exit_done_event.set()
-        logger.info("DisaggWorker shutdown complete.")
         try:
-            # Unregister from poller before closing the socket
+            log_task = getattr(self, "_force_log_task", None)
+            if log_task:
+                log_task.cancel()
+                try:
+                    await asyncio.wait_for(log_task, timeout=1)
+                except Exception:
+                    pass
+                self.running_requests.discard(log_task)
+                self._force_log_task = None
+                logger.info("Force log task cancelled during shutdown.")
+            # wait for all running requests to finish
+            pending = {t for t in self.running_requests if not t.done()}
+            if pending:
+                try:
+                    _, not_done = await asyncio.wait(
+                        pending,
+                        timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
+                    )
+                except Exception:
+                    logger.warning(
+                        "Some tasks did not finish cleanup in %s.",
+                        lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
+                    )
+                    not_done_left = pending
+                else:
+                    not_done_left = not_done
+                # cancel all running requests
+                for t in not_done_left:
+                    t.cancel()
             try:
-                self.poller.unregister(self.from_proxy)
-            except Exception:
-                logger.warning(
-                    "Could not unregister from_proxy from poller during shutdown."
-                )
+                # Unregister from poller before closing the socket
+                try:
+                    self.poller.unregister(self.from_proxy)
+                except Exception:
+                    logger.warning(
+                        "Could not unregister from_proxy from poller during shutdown."
+                    )
 
-            self.from_proxy.close(linger=0)
-        except Exception as e:
-            logger.error(
-                "Error closing from_proxy socket during shutdown: %s",
-                e,
-                exc_info=True,
-            )
+                self.from_proxy.close(linger=0)
+            except Exception as e:
+                logger.error(
+                    "Error closing from_proxy socket during shutdown: %s",
+                    e,
+                    exc_info=True,
+                )
+        finally:
+            if not self._exit_done_event.is_set():
+                self._exit_done_event.set()
+            logger.info("DisaggWorker shutdown complete.")
 
     # graceful shutdown on SIGTERM
     async def _shutdown_handler(self, reason: str) -> None:
