@@ -127,6 +127,8 @@ class DisaggWorker:
         self.stopping = False  # whether the worker is stopping
         self.running_requests: set[asyncio.Task] = set()
         self.poller = zmq.asyncio.Poller()
+        self._force_log_task: Optional[asyncio.Task] = None
+        self._exit_done_event = asyncio.Event()
 
     def shutdown(self):
         for socket in self.to_proxy.values():
@@ -200,20 +202,15 @@ class DisaggWorker:
                 while True:
                     await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
                     await self.engine.do_log_stats()
-
-            task = asyncio.create_task(_force_log())
-            self.running_requests.add(task)
-            task.add_done_callback(self.running_requests.discard)
+            self._force_log_task = asyncio.create_task(_force_log(), name="force_log")
+            self.running_requests.add(self._force_log_task)
+            self._force_log_task.add_done_callback(self.running_requests.discard)
         while not self.stopping:
             # poll for requests from proxy
             # if worker is stopping, exit the loop
             try:
                 events = dict(
-                    await self.poller.poll(
-                        timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT
-                        * 1000
-                        / 2
-                    )
+                    await self.poller.poll(1000)
                 )
             except asyncio.CancelledError:
                 # When the worker is stopping, the poller may be cancelled.
@@ -238,6 +235,7 @@ class DisaggWorker:
                         break
                     raise
                 await self._handle_request(req_type, req_data)
+        await self._exit_done_event.wait()
         logger.info("Worker loop stopped.")
 
     async def _handle_request(self, req_type: bytes, req_data: bytes):
@@ -319,13 +317,23 @@ class DisaggWorker:
         )
         await self._handle_response(req, msg)
 
-    # handle exit request from proxy
+    # handle exit request from proxy and do graceful shutdown on SIGTERM
     async def _exit_handler(self) -> None:
         if self.stopping:
             return
         # set stopping flag to exit busy loop
         self.stopping = True
-
+        # cancel force log task
+        log_task = getattr(self, "_force_log_task", None)
+        if log_task:
+            log_task.cancel()
+            try:
+                await asyncio.wait_for(log_task, timeout=1)
+            except Exception:
+                pass
+            self.running_requests.discard(log_task)
+            self._force_log_task = None
+            logger.info(f"Force log task cancelled during shutdown.")
         # wait for all running requests to finish
         pending = {t for t in self.running_requests if not t.done()}
         if pending:
@@ -345,6 +353,8 @@ class DisaggWorker:
             # cancel all running requests
             for t in not_done_left:
                 t.cancel()
+        self._exit_done_event.set()
+        logger.info("DisaggWorker shutdown complete.")
         try:
             # Unregister from poller before closing the socket
             try:

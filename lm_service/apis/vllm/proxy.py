@@ -1064,7 +1064,7 @@ class Proxy(EngineClient):
         node_key = (
             f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.value}"
         )
-        if hasattr(self.metastore_client, "delete_metadata"):
+        if hasattr(self, "metastore_client") and hasattr(self.metastore_client, "delete_metadata"):
             self.metastore_client.delete_metadata(node_key, worker_addr)
 
     async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
@@ -1080,7 +1080,7 @@ class Proxy(EngineClient):
         node_key = (
             f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.value}"
         )
-        if hasattr(self.metastore_client, "delete_metadata"):
+        if hasattr(self, "metastore_client") and hasattr(self.metastore_client, "delete_metadata"):
             self.metastore_client.delete_metadata(node_key, req.addr)
         logger.info(
             "Instance %s addr %s is exiting (reason=%s, in_flight=%d).",
