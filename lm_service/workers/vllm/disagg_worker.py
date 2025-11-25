@@ -202,16 +202,19 @@ class DisaggWorker:
                 while True:
                     await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
                     await self.engine.do_log_stats()
-            self._force_log_task = asyncio.create_task(_force_log(), name="force_log")
+
+            self._force_log_task = asyncio.create_task(
+                _force_log(), name="force_log"
+            )
             self.running_requests.add(self._force_log_task)
-            self._force_log_task.add_done_callback(self.running_requests.discard)
+            self._force_log_task.add_done_callback(
+                self.running_requests.discard
+            )
         while not self.stopping:
             # poll for requests from proxy
             # if worker is stopping, exit the loop
             try:
-                events = dict(
-                    await self.poller.poll(1000)
-                )
+                events = dict(await self.poller.poll(1000))
             except asyncio.CancelledError:
                 # When the worker is stopping, the poller may be cancelled.
                 # So we don't raise error.
@@ -333,7 +336,7 @@ class DisaggWorker:
                 pass
             self.running_requests.discard(log_task)
             self._force_log_task = None
-            logger.info(f"Force log task cancelled during shutdown.")
+            logger.info("Force log task cancelled during shutdown.")
         # wait for all running requests to finish
         pending = {t for t in self.running_requests if not t.done()}
         if pending:
