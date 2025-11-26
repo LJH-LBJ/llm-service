@@ -711,14 +711,13 @@ class Proxy(EngineClient):
                         return
                     else:
                         socket_dict[address] = socket
+                        logger.info(f"Connected to worker {address} success")
 
         else:
             logger.error(
                 f"_worker_register_handler fail, unknown server type {server_type}"
             )
             return
-
-        logger.info(f"Connected to worker {address} success")
 
     async def _run_output_handler(self) -> None:
         """Background task to pull responses and dispatch to request queues.
