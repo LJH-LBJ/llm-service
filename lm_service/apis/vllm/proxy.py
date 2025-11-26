@@ -981,68 +981,6 @@ class Proxy(EngineClient):
         finally:
             self.queues.pop(request_id, None)
 
-    async def exit_instance(
-        self,
-        addr: str,
-        server_type: ServerType,
-    ) -> None:
-        """
-        request the specified instance to exit gracefully:
-        1. add the instance to the draining set (stop routing new requests)
-        2. send EXIT request
-        3. the instance will remove itself from service discovery
-        """
-
-        # lazy initialization
-        if self.output_handler is None:
-            self.output_handler = asyncio.create_task(
-                self._run_output_handler()
-            )
-        if addr is None:
-            logger.warning(
-                "Exit instance failed, addr is None.",
-            )
-            return
-        worker_addr = (
-            f"{self.transfer_protocol}://{addr}"
-            if not addr.startswith(self.transfer_protocol)
-            else addr
-        )
-        try:
-            socket = await self._get_socket_and_server_types_from_addr(
-                worker_addr, server_type
-            )
-        except ValueError:
-            socket = None
-
-        if socket is None:
-            logger.warning(
-                "Exit instance failed for %s, addr %s not found.",
-                server_type,
-                worker_addr,
-            )
-            return
-        # Create exit request
-        request_id = str(uuid.uuid4())
-        request = ExitRequest(request_id=request_id, reason="user_exit")
-        try:
-            payload = self.encoder.encode(request)
-            msg = (RequestType.EXIT, payload)
-
-            await socket.send_multipart(msg, copy=False)
-            logger.info(
-                "Exit request sent to %s instance addr %s.",
-                server_type,
-                addr,
-            )
-        except Exception as e:
-            raise RuntimeError(
-                "Exit instance failed, exception: %s" % (e)
-            ) from e
-
-        # stop routing new requests
-        await self._remove_instance_from_registry(worker_addr, server_type)
-
     async def handle_exit_from_worker(self, req: ExitRequest) -> None:
         # lazy initialization
         if self.output_handler is None:

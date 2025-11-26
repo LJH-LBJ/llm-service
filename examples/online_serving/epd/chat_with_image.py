@@ -114,24 +114,6 @@ async def main():
             # wait for logging
             await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
             asyncio.create_task(p.log_metrics())
-            await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
-        # test for exit_instance
-        exit_tasks = []
-        if args.pd_addr_list:
-            pd_num = len(args.pd_addr_list)
-            for i in range(pd_num):
-                exit_task = asyncio.create_task(
-                    asyncio.wait_for(
-                        p.exit_instance(
-                            addr=args.pd_addr_list[i],
-                            server_type=ServerType.PD_INSTANCE,
-                        ),
-                        timeout=lm_service_envs.LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC,
-                    )
-                )
-                exit_tasks.append(exit_task)
-        if exit_tasks:
-            await asyncio.gather(*exit_tasks)
     finally:
         p.shutdown()
 

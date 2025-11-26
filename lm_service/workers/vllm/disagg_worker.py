@@ -267,8 +267,6 @@ class DisaggWorker:
         elif req_type == RequestType.METRICS:
             metrics_req = self.decoder_metrics.decode(req_data)
             await self._metrics_handler(metrics_req)
-        elif req_type == RequestType.EXIT:
-            await self._exit_handler()
         else:
             raise Exception(f"Unknown Request Type: {req_type.decode()}.")
 

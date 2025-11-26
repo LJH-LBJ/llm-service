@@ -111,9 +111,9 @@ class MetricsResponse(msgspec.Struct):
 class ExitRequest(msgspec.Struct):
     request_id: str
     reason: str
-    addr: Optional[str] = None
-    server_type: Optional[ServerType] = None
-    in_flight: Optional[int] = None
+    addr: str
+    server_type: ServerType
+    in_flight: int
 
 
 class WorkerRegisterRequest(msgspec.Struct):
