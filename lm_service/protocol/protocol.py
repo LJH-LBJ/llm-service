@@ -45,7 +45,6 @@ class ResponseType:
     METRICS = b"\x04"
     PREFILL = b"\x05"
     REGISTER = b"\x06"
-    SIGTERM = b"\x07"
 
 
 class GenerationResponse(msgspec.Struct):
@@ -108,18 +107,12 @@ class MetricsResponse(msgspec.Struct):
     metrics: Optional[dict[int, dict[str, Union[int, float]]]]
 
 
-# Sent from proxy to worker to request graceful shutdown
+# message to request graceful shutdown
 class ExitRequest(msgspec.Struct):
     request_id: str
-    reason: str = "user_exit"
-
-
-# Sent from worker to proxy when shutting down (e.g., on SIGTERM)
-class ShutdownRequest(msgspec.Struct):
-    request_id: str
-    addr: str
-    server_type: ServerType
-    in_flight: int
+    addr: Optional[str]
+    server_type: Optional[ServerType]
+    in_flight: Optional[int]
     reason: str
 
 

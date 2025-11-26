@@ -126,7 +126,7 @@ async def main():
                             addr=args.pd_addr_list[i],
                             server_type=ServerType.PD_INSTANCE,
                         ),
-                        timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
+                        timeout=lm_service_envs.LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC,
                     )
                 )
                 exit_tasks.append(exit_task)

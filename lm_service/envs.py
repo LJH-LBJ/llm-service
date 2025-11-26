@@ -71,8 +71,8 @@ environment_variables: dict[str, Callable[[], Any]] = {
     ),
     # Timeout in seconds for graceful worker shutdown and request cleanup.
     # Used to control how long a worker waits to finish processing before exiting.
-    "LM_SERVICE_WORKER_EXIT_TIMEOUT": lambda: int(
-        os.getenv("LM_SERVICE_WORKER_EXIT_TIMEOUT", 5)
+    "LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC": lambda: int(
+        os.getenv("LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC", 600)
     ),
 }
 

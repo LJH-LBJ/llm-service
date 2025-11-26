@@ -134,7 +134,7 @@ class DisaggWorker:
     def shutdown(self):
         for socket in self.to_proxy.values():
             socket.close(
-                linger=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT * 1000
+                linger=lm_service_envs.LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC * 1000
             )
         self.ctx.destroy()
 
@@ -326,7 +326,7 @@ class DisaggWorker:
 
     # handle exit request from proxy and do graceful shutdown on SIGTERM
     async def _exit_handler(self) -> None:
-        if getattr(self, "_exit_started", False):
+        if self._exit_started:
             return
         # set stopping flag to exit busy loop
         self._exit_started = True
@@ -350,12 +350,12 @@ class DisaggWorker:
                 try:
                     _, not_done = await asyncio.wait(
                         pending,
-                        timeout=lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
+                        timeout=lm_service_envs.LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC,
                     )
                 except Exception:
                     logger.warning(
                         "Some tasks did not finish cleanup in %s.",
-                        lm_service_envs.LM_SERVICE_WORKER_EXIT_TIMEOUT,
+                        lm_service_envs.LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC,
                     )
                     not_done_left = pending
                 else:
@@ -379,6 +379,16 @@ class DisaggWorker:
                     e,
                     exc_info=True,
                 )
+            # delete metadata from metastore
+            node_key = (
+                f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{self.server_type.value}"
+            )
+            if (
+                hasattr(self, "metastore_client")
+                and self.metastore_client is not None
+                and hasattr(self.metastore_client, "delete_metadata")
+            ):
+                self.metastore_client.delete_metadata(node_key, self.worker_addr)
         finally:
             if not self._exit_done_event.is_set():
                 self._exit_done_event.set()
@@ -389,7 +399,7 @@ class DisaggWorker:
         request_id = str(uuid.uuid4())
         # send exit request to the proxy
         msg = (
-            ResponseType.SIGTERM,
+            RequestType.EXIT,
             self.encoder.encode(
                 ShutdownRequest(
                     request_id=request_id,

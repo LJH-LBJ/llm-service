@@ -703,15 +703,8 @@ class Proxy(EngineClient):
 
                 cluster_lock = self._get_cluster_lock(server_type)
                 async with cluster_lock:
-                    if address in socket_dict:
-                        socket.close(linger=0)
-                        logger.info(
-                            f"Worker {address} already registered, ignore."
-                        )
-                        return
-                    else:
-                        socket_dict[address] = socket
-                        logger.info(f"Connected to worker {address} success")
+                    socket_dict[address] = socket
+                    logger.info(f"Connected to worker {address} success")
 
         else:
             logger.error(
@@ -732,7 +725,7 @@ class Proxy(EngineClient):
         failure_decoder = msgspec.msgpack.Decoder(FailureResponse)
         heartbeat_decoder = msgspec.msgpack.Decoder(HeartbeatResponse)
         metrics_decoder = msgspec.msgpack.Decoder(MetricsResponse)
-        sigterm_decoder = msgspec.msgpack.Decoder(ShutdownRequest)
+        exit_decoder = msgspec.msgpack.Decoder(ExitRequest)
         worker_register_decoder = msgspec.msgpack.Decoder(WorkerRegisterRequest)
         try:
             socket = self.ctx.socket(zmq.constants.PULL)
@@ -799,19 +792,9 @@ class Proxy(EngineClient):
                     resp = failure_decoder.decode(payload)
                 elif resp_type == ResponseType.METRICS:
                     resp = metrics_decoder.decode(payload)
-                elif resp_type == ResponseType.SIGTERM:
-                    resp = sigterm_decoder.decode(payload)
-                    task = asyncio.create_task(
-                        self.handle_sigterm_from_worker(resp)
-                    )
-                    task.add_done_callback(
-                        lambda t: logger.error(
-                            "Exception in handle_sigterm_from_worker: %s",
-                            t.exception(),
-                        )
-                        if t.exception() is not None and not t.cancelled()
-                        else None
-                    )
+                elif resp_type == RequestType.EXIT:
+                    resp = exit_decoder.decode(payload)
+                    self.create_handle_exit_task(resp)
                 elif resp_type == RequestType.REGISTER:
                     resp = worker_register_decoder.decode(payload)
                     asyncio.create_task(self._worker_register_handler(resp))
@@ -824,7 +807,7 @@ class Proxy(EngineClient):
                     if resp_type not in (
                         ResponseType.HEARTBEAT,
                         ResponseType.METRICS,
-                        ResponseType.SIGTERM,
+                        RequestType.EXIT,
                         RequestType.REGISTER,
                     ):
                         logger.warning(
@@ -1042,7 +1025,7 @@ class Proxy(EngineClient):
             return
         # Create exit request
         request_id = str(uuid.uuid4())
-        request = ExitRequest(request_id=request_id)
+        request = ExitRequest(request_id=request_id, reason="user_exit")
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.EXIT, payload)
@@ -1059,16 +1042,9 @@ class Proxy(EngineClient):
             ) from e
 
         # stop routing new requests
-        await self.refresh_health_status(worker_addr, server_type)
-        node_key = (
-            f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.value}"
-        )
-        if hasattr(self, "metastore_client") and hasattr(
-            self.metastore_client, "delete_metadata"
-        ):
-            self.metastore_client.delete_metadata(node_key, worker_addr)
+        await self._remove_instance_from_registry(worker_addr, server_type)
 
-    async def handle_sigterm_from_worker(self, req: ShutdownRequest) -> None:
+    async def handle_exit_from_worker(self, req: ShutdownRequest) -> None:
         # lazy initialization
         if self.output_handler is None:
             self.output_handler = asyncio.create_task(
@@ -1077,20 +1053,26 @@ class Proxy(EngineClient):
         server_type = req.server_type
 
         # stop routing new requests to it
-        await self.refresh_health_status(req.addr, server_type)
-        node_key = (
-            f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{server_type.value}"
-        )
-        if hasattr(self, "metastore_client") and hasattr(
-            self.metastore_client, "delete_metadata"
-        ):
-            self.metastore_client.delete_metadata(node_key, req.addr)
+        await self._remove_instance_from_registry(req.addr, server_type)
         logger.info(
             "Instance %s addr %s is exiting (reason=%s, in_flight=%d).",
             server_type,
             req.addr,
             req.reason,
             req.in_flight,
+        )
+    
+    def create_handle_exit_task(self, resp: ShutdownRequest) -> None:
+        task = asyncio.create_task(
+            self.handle_exit_from_worker(resp)
+        )
+        task.add_done_callback(
+            lambda t: logger.error(
+                "Exception in handle_exit_from_worker: %s",
+                t.exception(),
+            )
+            if t.exception() is not None and not t.cancelled()
+            else None
         )
 
     async def _await_with_timeout(
@@ -1181,7 +1163,7 @@ class Proxy(EngineClient):
             return self._d_cluster_lock
         raise ValueError(f"No lock for server type {server_type}")
 
-    async def refresh_health_status(
+    async def _remove_instance_from_registry(
         self, addr: str, server_type: ServerType
     ) -> None:
         if server_type == ServerType.E_INSTANCE:
