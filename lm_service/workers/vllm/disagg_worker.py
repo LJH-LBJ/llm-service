@@ -388,7 +388,9 @@ class DisaggWorker:
                 self.metastore_client.delete_metadata(
                     node_key, self.worker_addr
                 )
-                logger.info(f"Deleted metadata for {self.worker_addr} from metastore.")
+                logger.info(
+                    f"Deleted metadata for {self.worker_addr} from metastore."
+                )
         finally:
             if not self._exit_done_event.is_set():
                 self._exit_done_event.set()
