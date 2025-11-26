@@ -134,7 +134,8 @@ class DisaggWorker:
     def shutdown(self):
         for socket in self.to_proxy.values():
             socket.close(
-                linger=lm_service_envs.LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC * 1000
+                linger=lm_service_envs.LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC
+                * 1000
             )
         self.ctx.destroy()
 
@@ -380,15 +381,15 @@ class DisaggWorker:
                     exc_info=True,
                 )
             # delete metadata from metastore
-            node_key = (
-                f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{self.server_type.value}"
-            )
+            node_key = f"{lm_service_envs.LM_SERVICE_REDIS_KEY_PREFIX}_{self.server_type.value}"
             if (
                 hasattr(self, "metastore_client")
                 and self.metastore_client is not None
                 and hasattr(self.metastore_client, "delete_metadata")
             ):
-                self.metastore_client.delete_metadata(node_key, self.worker_addr)
+                self.metastore_client.delete_metadata(
+                    node_key, self.worker_addr
+                )
         finally:
             if not self._exit_done_event.is_set():
                 self._exit_done_event.set()

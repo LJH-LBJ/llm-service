@@ -1061,11 +1061,9 @@ class Proxy(EngineClient):
             req.reason,
             req.in_flight,
         )
-    
+
     def create_handle_exit_task(self, resp: ShutdownRequest) -> None:
-        task = asyncio.create_task(
-            self.handle_exit_from_worker(resp)
-        )
+        task = asyncio.create_task(self.handle_exit_from_worker(resp))
         task.add_done_callback(
             lambda t: logger.error(
                 "Exception in handle_exit_from_worker: %s",
