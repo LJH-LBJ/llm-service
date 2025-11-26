@@ -19,6 +19,7 @@ from vllm.config import ECTransferConfig, KVTransferConfig
 
 from lm_service.stats_loggers import DisaggWorkerStatsLogger
 from lm_service.protocol.protocol import (
+    ExitRequest,
     FailureResponse,
     GenerationRequest,
     GenerationResponse,
@@ -28,7 +29,6 @@ from lm_service.protocol.protocol import (
     MetricsResponse,
     RequestType,
     ResponseType,
-    ShutdownRequest,
     ServerType,
     WorkerRegisterRequest,
 )
@@ -402,7 +402,7 @@ class DisaggWorker:
         msg = (
             RequestType.EXIT,
             self.encoder.encode(
-                ShutdownRequest(
+                ExitRequest(
                     request_id=request_id,
                     addr=self.worker_addr,
                     server_type=self.get_server_type(),

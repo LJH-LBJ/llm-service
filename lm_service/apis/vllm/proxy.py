@@ -34,7 +34,6 @@ from lm_service.protocol.protocol import (
     RequestType,
     ResponseType,
     ServerType,
-    ShutdownRequest,
     WorkerRegisterRequest,
 )
 from lm_service.request_stats import RequestStatsMonitor
@@ -776,7 +775,7 @@ class Proxy(EngineClient):
                     HeartbeatResponse,
                     FailureResponse,
                     MetricsResponse,
-                    ShutdownRequest,
+                    ExitRequest,
                     WorkerRegisterRequest,
                 ]
                 # TODO: maybe we can have a mapping from resp_type to prefill
@@ -1044,7 +1043,7 @@ class Proxy(EngineClient):
         # stop routing new requests
         await self._remove_instance_from_registry(worker_addr, server_type)
 
-    async def handle_exit_from_worker(self, req: ShutdownRequest) -> None:
+    async def handle_exit_from_worker(self, req: ExitRequest) -> None:
         # lazy initialization
         if self.output_handler is None:
             self.output_handler = asyncio.create_task(
@@ -1053,7 +1052,13 @@ class Proxy(EngineClient):
         server_type = req.server_type
 
         # stop routing new requests to it
-        await self._remove_instance_from_registry(req.addr, server_type)
+        if req.addr and server_type:
+            await self._remove_instance_from_registry(req.addr, server_type)
+        else:
+            logger.warning(
+                "Exit instance handling failed, addr or server_type is None.",
+            )
+            return
         logger.info(
             "Instance %s addr %s is exiting (reason=%s, in_flight=%d).",
             server_type,
@@ -1062,7 +1067,7 @@ class Proxy(EngineClient):
             req.in_flight,
         )
 
-    def create_handle_exit_task(self, resp: ShutdownRequest) -> None:
+    def create_handle_exit_task(self, resp: ExitRequest) -> None:
         task = asyncio.create_task(self.handle_exit_from_worker(resp))
         task.add_done_callback(
             lambda t: logger.error(
