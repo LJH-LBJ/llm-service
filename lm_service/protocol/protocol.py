@@ -110,9 +110,9 @@ class MetricsResponse(msgspec.Struct):
 # message to request graceful shutdown
 class ExitRequest(msgspec.Struct):
     request_id: str
-    addr: Optional[str]
-    server_type: Optional[ServerType]
-    in_flight: Optional[int]
+    addr: Optional[str] = None
+    server_type: Optional[ServerType] = None
+    in_flight: Optional[int] = None
     reason: str
 
 
