@@ -10,6 +10,7 @@ from PIL import Image
 
 from vllm import SamplingParams
 import vllm.envs as envs
+from lm_service.apis.vllm.proxy import Proxy
 import lm_service.envs as lm_service_envs
 
 PROXY_NUM = 1
@@ -101,6 +102,7 @@ async def run_single_proxy(proxy_addr):
         if lm_service_envs.TIMECOUNT_ENABLED:
             # wait for logging
             await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
+            asyncio.create_task(p.log_metrics())
     finally:
         p.shutdown()
 
