@@ -137,7 +137,6 @@ class DisaggWorker:
                 linger=lm_service_envs.LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC
                 * 1000
             )
-        # TODO: use metastore_client.close()
         self.ctx.destroy()
 
         for running_request in self.running_requests:
