@@ -60,6 +60,8 @@ from lm_service.utils import is_addr_ipv6
 
 from lm_service.logger_utils import init_logger
 
+from lm_service.instance_cluster import InstanceCluster, SERVER_PARAMS_MAP
+
 logger = init_logger(__name__)
 
 ROUTER_MAP = {
@@ -89,26 +91,19 @@ class Proxy(EngineClient):
         transfer_protocol: Optional[str] = None,
         metastore_client_config: Optional[dict] = None,
     ):
+        self.instance_clusters: dict[ServerType, InstanceCluster] = {}
         self.queues: dict[str, asyncio.Queue] = {}
-
+        # This "Encoder" is used for handling message types, not for "Encode - Prefill - Decode"
         self.encoder = msgspec.msgpack.Encoder()
         self.transfer_protocol = (
             lm_service_envs.TRANSFER_PROTOCOL or transfer_protocol or "ipc"
         )
         self.ctx = zmq.asyncio.Context()
-        self.encoder_addr_list: list[str] = []
-        self.pd_addr_list: list[str] = []
-        self.p_addr_list: list[str] = []
-        self.d_addr_list: list[str] = []
         self.to_encode_sockets: dict[str, zmq.asyncio.Socket] = {}
         self.to_pd_sockets: dict[str, zmq.asyncio.Socket] = {}
         self.to_p_sockets: dict[str, zmq.asyncio.Socket] = {}
         self.to_d_sockets: dict[str, zmq.asyncio.Socket] = {}
-        # Cluster locks for managing access to socket dictionaries
-        self._encode_cluster_lock = asyncio.Lock()
-        self._pd_cluster_lock = asyncio.Lock()
-        self._p_cluster_lock = asyncio.Lock()
-        self._d_cluster_lock = asyncio.Lock()
+
         self.enable_health_monitor = enable_health_monitor
         self.health_check_interval = health_check_interval
         self.health_threshold = health_threshold
@@ -127,10 +122,20 @@ class Proxy(EngineClient):
             task="generate",
             seed=42,
         )
-        if (
+
+        use_metastore = (
             metastore_client_config is not None
             or lm_service_envs.LM_SERVICE_METASTORE_CLIENT is not None
-        ):
+        )
+
+        self.server_to_socket_map = {
+            ServerType.E_INSTANCE: self.to_encode_sockets,
+            ServerType.PD_INSTANCE: self.to_pd_sockets,
+            ServerType.P_INSTANCE: self.to_p_sockets,
+            ServerType.D_INSTANCE: self.to_d_sockets,
+        }
+
+        if use_metastore:
             config: MetastoreClientConfig = json_to_metastore_config(
                 metastore_client_config
             )
@@ -156,93 +161,78 @@ class Proxy(EngineClient):
                 )
             )
             self.is_pd_merged = self.metastore_client.is_pd_merge
-        elif (
-            proxy_addr is None
-            or encode_addr_list is None
-            or (
-                pd_addr_list is None
-                and (p_addr_list is None or d_addr_list is None)
-            )
-        ):
-            raise ValueError(
-                "proxy_addr, encode_addr_list, pd_addr_list must be provided"
-            )
         else:
-            if pd_addr_list is None:
-                self.is_pd_merged = False
+            self._validate_input_addr_and_judge_pd_merged(
+                proxy_addr=proxy_addr,
+                encode_addr_list=encode_addr_list,
+                pd_addr_list=pd_addr_list,
+                p_addr_list=p_addr_list,
+                d_addr_list=d_addr_list,
+            )
             self.proxy_addr = f"{self.transfer_protocol}://{proxy_addr}"
             if is_addr_ipv6(proxy_addr) and self.transfer_protocol == "tcp":
                 self.ctx.setsockopt(zmq.constants.IPV6, 1)
-            self.encoder_addr_list = [
-                f"{self.transfer_protocol}://{addr}"
-                for addr in encode_addr_list or []
-            ]
-            self.pd_addr_list = [
-                f"{self.transfer_protocol}://{addr}"
-                for addr in pd_addr_list or []
-            ]
-            self.p_addr_list = [
-                f"{self.transfer_protocol}://{addr}"
-                for addr in p_addr_list or []
-            ]
-            self.d_addr_list = [
-                f"{self.transfer_protocol}://{addr}"
-                for addr in d_addr_list or []
-            ]
-            self.to_encode_sockets = self.connect_to_socket(
-                self.encoder_addr_list
-            )
-            self.to_pd_sockets = self.connect_to_socket(self.pd_addr_list)
-            self.to_p_sockets = self.connect_to_socket(self.p_addr_list)
-            self.to_d_sockets = self.connect_to_socket(self.d_addr_list)
 
-        (
-            self.encoder_service_discovery,
-            self.encoder_metrics_logger,
-            self.encoder_request_stats_monitor,
-            self.encoder_router,
-        ) = self._initialize_instance_clusters(
-            ServerType.E_INSTANCE,
-            self.to_encode_sockets,
+        # Using the is_pd_merged as the only key to determine which instance cluster to initialize
+        init_params = locals()
+        active_types = (
+            {ServerType.E_INSTANCE, ServerType.PD_INSTANCE}
+            if self.is_pd_merged
+            else {
+                ServerType.E_INSTANCE,
+                ServerType.P_INSTANCE,
+                ServerType.D_INSTANCE,
+            }
         )
+        for server_type in active_types:
+            if not use_metastore:
+                addr_param_name = SERVER_PARAMS_MAP[server_type][
+                    "addr_list_name"
+                ]
+                addr_list = [
+                    f"{self.transfer_protocol}://{addr}"
+                    for addr in init_params[str(addr_param_name)]
+                ]
+                sockets = self.connect_to_socket(addr_list)
+            else:
+                sockets = self.server_to_socket_map[server_type]
+            self._initialize_instance_clusters(server_type, sockets)
+
+    def _validate_input_addr_and_judge_pd_merged(
+        self,
+        proxy_addr,
+        encode_addr_list,
+        pd_addr_list,
+        p_addr_list,
+        d_addr_list,
+    ):
+        if not proxy_addr:
+            raise ValueError("proxy_addr must be provided")
+
+        if not encode_addr_list:
+            raise ValueError("encode_addr_list must be provided")
+
+        self.is_pd_merged = pd_addr_list is not None and len(pd_addr_list) > 0
 
         if self.is_pd_merged:
-            (
-                self.pd_service_discovery,
-                self.pd_metrics_logger,
-                self.pd_request_stats_monitor,
-                self.pd_router,
-            ) = self._initialize_instance_clusters(
-                ServerType.PD_INSTANCE, self.to_pd_sockets
-            )
+            if p_addr_list or d_addr_list:
+                raise ValueError(
+                    "If pd_addr_list is provided, "
+                    "p_addr_list and d_addr_list must not be provided"
+                )
         else:
-            (
-                self.p_service_discovery,
-                self.p_metrics_logger,
-                self.p_request_stats_monitor,
-                self.p_router,
-            ) = self._initialize_instance_clusters(
-                ServerType.P_INSTANCE, self.to_p_sockets
-            )
-            (
-                self.d_service_discovery,
-                self.d_metrics_logger,
-                self.d_request_stats_monitor,
-                self.d_router,
-            ) = self._initialize_instance_clusters(
-                ServerType.D_INSTANCE, self.to_d_sockets
-            )
+            if not p_addr_list or not d_addr_list:
+                raise ValueError(
+                    "If pd_addr_list is not provided, "
+                    "both p_addr_list and d_addr_list must be provided"
+                )
 
     def _initialize_instance_clusters(
         self,
         engine_type: ServerType,
         socket_dict: dict[str, zmq.asyncio.Socket],
-    ) -> tuple[
-        HealthCheckServiceDiscovery,
-        MetricsReporter,
-        RequestStatsMonitor,
-        RoutingInterface,
-    ]:
+    ):
+        lock = asyncio.Lock()
         service_discovery = HealthCheckServiceDiscovery(
             server_type=engine_type,
             instances=socket_dict,
@@ -250,7 +240,7 @@ class Proxy(EngineClient):
             health_check_interval=self.health_check_interval,
             health_threshold=self.health_threshold,
             health_check_func=self.check_health,
-            lock=self._get_cluster_lock(engine_type),
+            lock=lock,
         )
         metrics_logger = MetricsReporter(
             server_type=engine_type,
@@ -263,11 +253,14 @@ class Proxy(EngineClient):
             ROUTER_MAP.get(getattr(lm_service_envs, route_policy), None)
             or self.router
         )()
-        return (
-            service_discovery,
-            metrics_logger,
-            request_stats_monitor,
-            instance_router,
+        self.instance_clusters[engine_type] = InstanceCluster(
+            server_type=engine_type,
+            sockets=socket_dict,
+            service_discovery=service_discovery,
+            stats_monitor=request_stats_monitor,
+            router=instance_router,
+            metrics_logger=metrics_logger,
+            socket_lock=lock,
         )
 
     def shutdown(self):
@@ -285,13 +278,9 @@ class Proxy(EngineClient):
             self.metastore_client.close()
 
     async def log_metrics(self) -> None:
-        if self.is_pd_merged:
-            await self.pd_metrics_logger.get_metrics()
-        else:
-            await self.p_metrics_logger.get_metrics()
-            await self.d_metrics_logger.get_metrics()
-
-        await self.encoder_metrics_logger.get_metrics()
+        for server_type in self.instance_clusters:
+            cluster = self.instance_clusters[server_type]
+            await cluster.get_metrics()
 
     def connect_to_socket(
         self, addr_list: list[str]
@@ -313,226 +302,26 @@ class Proxy(EngineClient):
             logger.info(f"Connected to worker {addr} success")
         return to_sockets
 
-    async def _run_encode(
+    async def _process_request(
         self,
-        request: GenerationRequest,
-        q: asyncio.Queue[Union[Exception, GenerationResponse]],
-    ) -> None:
-        """
-        Send the encode request to one encoder worker.
-        The encoder worker is selected based on hashing the request ID.
-        """
-        if not self.to_encode_sockets:
-            raise RuntimeError(
-                "No encode workers configured: encode_addr_list is empty."
-            )
-
-        try:
-            payload = self.encoder.encode(request)
-        except Exception as e:
-            raise RuntimeError("Failed to serialize GenerationRequest") from e
-
-        msg = (RequestType.ENCODE, payload)
-        cluster_lock = self._get_cluster_lock(ServerType.E_INSTANCE)
-        async with cluster_lock:
-            health_endpoints = (
-                self.encoder_service_discovery.get_health_endpoints()
-            )
-            request_stats = (
-                self.encoder_request_stats_monitor.get_request_stats()
-            )
-            addr = self.encoder_router.route_request(
-                health_endpoints, request_stats
-            )
-            self.encoder_request_stats_monitor.on_new_request(
-                addr, request_id=request.request_id
-            )
-            socket = self.to_encode_sockets[addr]
-
-        try:
-            if lm_service_envs.TIMECOUNT_ENABLED:
-                proxy_to_encode_time_start = time.perf_counter()
-            await socket.send_multipart(msg, copy=False)
-            response = await self._await_with_timeout(request.request_id, q)
-            if (
-                lm_service_envs.TIMECOUNT_ENABLED
-                and isinstance(response, GenerationResponse)
-                and response.proxy_to_worker_time_end
-            ):
-                self.encoder_metrics_logger.add_proxy_to_instance_time(
-                    addr,
-                    response.proxy_to_worker_time_end
-                    - proxy_to_encode_time_start,  # type: ignore
-                )
-
-            if isinstance(response, Exception):
-                raise response
-        finally:
-            self.encoder_request_stats_monitor.on_request_completed(
-                addr, request_id=request.request_id
-            )
-
-    async def _run_pd(
-        self,
+        server_type: ServerType,
         request: GenerationRequest,
         q: asyncio.Queue[Union[Exception, GenerationResponse]],
     ):
-        """
-        Send the generation request to a PD worker and yield its response.
-        The PD worker is selected based on hashing the request ID.
-        """
-        if not self.to_pd_sockets:
-            raise RuntimeError(
-                "No PD workers configured: pd_addr_list is empty."
-            )
+        cluster = self.instance_clusters[server_type]
+        await cluster.process_request(request, q)
 
-        try:
-            payload = self.encoder.encode(request)
-        except Exception as e:
-            raise RuntimeError("Failed to serialize GenerationRequest") from e
-
-        msg = (RequestType.GENERATION, payload)
-        cluster_lock = self._get_cluster_lock(ServerType.PD_INSTANCE)
-        async with cluster_lock:
-            health_endpoints = self.pd_service_discovery.get_health_endpoints()
-            request_stats = self.pd_request_stats_monitor.get_request_stats()
-            addr = self.pd_router.route_request(health_endpoints, request_stats)
-            self.pd_request_stats_monitor.on_new_request(
-                addr, request_id=request.request_id
-            )
-            socket = self.to_pd_sockets[addr]
-
-        try:
-            if lm_service_envs.TIMECOUNT_ENABLED:
-                proxy_to_pd_time_start = time.perf_counter()
-            await socket.send_multipart(msg, copy=False)
-            finished = False
-            while not finished:
-                response = await self._await_with_timeout(request.request_id, q)
-                if isinstance(response, Exception):
-                    raise response
-                if (
-                    lm_service_envs.TIMECOUNT_ENABLED
-                    and isinstance(response, GenerationResponse)
-                    and response.proxy_to_worker_time_end
-                ):
-                    self.pd_metrics_logger.add_proxy_to_instance_time(
-                        addr,
-                        response.proxy_to_worker_time_end
-                        - proxy_to_pd_time_start,  # type: ignore
-                    )
-                finished = response.finish_reason is not None
-                yield response
-        finally:
-            self.pd_request_stats_monitor.on_request_completed(
-                addr, request_id=request.request_id
-            )
-
-    async def _run_prefill(
+    async def _process_request_streaming_response(
         self,
+        server_type: ServerType,
         request: GenerationRequest,
         q: asyncio.Queue[Union[Exception, GenerationResponse]],
     ):
-        """
-        Send the prefill request to one encoder worker.
-        """
-        if not self.to_p_sockets:
-            raise RuntimeError(
-                "No Prefill workers configured: p_addr_list is empty."
-            )
-
-        try:
-            payload = self.encoder.encode(request)
-        except Exception as e:
-            raise RuntimeError("Failed to serialize GenerationRequest") from e
-
-        msg = (RequestType.PREFILL, payload)
-        cluster_lock = self._get_cluster_lock(ServerType.P_INSTANCE)
-        async with cluster_lock:
-            health_endpoints = self.p_service_discovery.get_health_endpoints()
-            request_stats = self.p_request_stats_monitor.get_request_stats()
-            addr = self.p_router.route_request(health_endpoints, request_stats)
-            self.p_request_stats_monitor.on_new_request(
-                addr, request_id=request.request_id
-            )
-            socket = self.to_p_sockets[addr]
-
-        try:
-            if lm_service_envs.TIMECOUNT_ENABLED:
-                proxy_to_p_time_start = time.perf_counter()
-            await socket.send_multipart(msg, copy=False)
-            response = await self._await_with_timeout(request.request_id, q)
-            if (
-                lm_service_envs.TIMECOUNT_ENABLED
-                and isinstance(response, GenerationResponse)
-                and response.proxy_to_worker_time_end
-            ):
-                self.p_metrics_logger.add_proxy_to_instance_time(
-                    addr,
-                    response.proxy_to_worker_time_end - proxy_to_p_time_start,  # type: ignore
-                )
-
-            if isinstance(response, Exception):
-                raise response
-        finally:
-            self.p_request_stats_monitor.on_request_completed(
-                addr, request_id=request.request_id
-            )
-
-    async def _run_decode(
-        self,
-        request: GenerationRequest,
-        q: asyncio.Queue[Union[Exception, GenerationResponse]],
-    ):
-        """
-        Send the generation request to a decode worker and yield its response.
-        """
-        if not self.to_d_sockets:
-            raise RuntimeError(
-                "No Decode workers configured: d_addr_list is empty."
-            )
-
-        try:
-            payload = self.encoder.encode(request)
-        except Exception as e:
-            raise RuntimeError("Failed to serialize GenerationRequest") from e
-
-        msg = (RequestType.GENERATION, payload)
-        cluster_lock = self._get_cluster_lock(ServerType.D_INSTANCE)
-        async with cluster_lock:
-            health_endpoints = self.d_service_discovery.get_health_endpoints()
-            request_stats = self.d_request_stats_monitor.get_request_stats()
-            addr = self.d_router.route_request(health_endpoints, request_stats)
-            self.d_request_stats_monitor.on_new_request(
-                addr, request_id=request.request_id
-            )
-            socket = self.to_d_sockets[addr]
-
-        try:
-            if lm_service_envs.TIMECOUNT_ENABLED:
-                proxy_to_d_time_start = time.perf_counter()
-            await socket.send_multipart(msg, copy=False)
-            finished = False
-            while not finished:
-                response = await self._await_with_timeout(request.request_id, q)
-                if isinstance(response, Exception):
-                    raise response
-                if (
-                    lm_service_envs.TIMECOUNT_ENABLED
-                    and isinstance(response, GenerationResponse)
-                    and response.proxy_to_worker_time_end
-                ):
-                    self.d_metrics_logger.add_proxy_to_instance_time(
-                        addr,
-                        response.proxy_to_worker_time_end
-                        - proxy_to_d_time_start,  # type: ignore
-                    )
-                finished = response.finish_reason is not None
-                yield response
-        finally:
-            self.d_request_stats_monitor.on_request_completed(
-                addr, request_id=request.request_id
-            )
+        cluster = self.instance_clusters[server_type]
+        async for resp in cluster.process_request_streaming_response(
+            request, q
+        ):
+            yield resp
 
     def _to_request_output(self, resp: GenerationResponse) -> RequestOutput:
         """Convert a PD/Generate response to vLLM RequestOutput.
@@ -576,17 +365,10 @@ class Proxy(EngineClient):
             self.output_handler = asyncio.create_task(
                 self._run_output_handler()
             )
-        if self.encoder_service_discovery.should_launch_health_monitor():
-            self.encoder_service_discovery.launch_health_monitor()
-        # PD-merged or not
-        if self.is_pd_merged:
-            if self.pd_service_discovery.should_launch_health_monitor():
-                self.pd_service_discovery.launch_health_monitor()
-        else:
-            if self.p_service_discovery.should_launch_health_monitor():
-                self.p_service_discovery.launch_health_monitor()
-            if self.d_service_discovery.should_launch_health_monitor():
-                self.d_service_discovery.launch_health_monitor()
+
+        # lazy init all health monitors
+        for cluster in self.instance_clusters.values():
+            cluster.lazy_init_health_monitor()
 
         if not request_id:
             request_id = uuid.uuid4().hex
@@ -618,21 +400,31 @@ class Proxy(EngineClient):
                 request.multi_modal_data = _encode_mm_data(
                     prompt["multi_modal_data"]
                 )
-                await self._run_encode(request, q)
+                await self._process_request(ServerType.E_INSTANCE, request, q)
 
             if self.is_pd_merged:
-                async for pd_response in self._run_pd(request, q):
+                pd_cluster = self.instance_clusters[ServerType.PD_INSTANCE]
+                async for (
+                    pd_response
+                ) in self._process_request_streaming_response(
+                    ServerType.PD_INSTANCE, request, q
+                ):
                     yield self._to_request_output(pd_response)
-                    ttft_recorded_flag = self.pd_metrics_logger.cal_proxy_ttft(
+                    ttft_recorded_flag = pd_cluster.cal_proxy_ttft(
                         ttft_recorded_flag,
                         proxy_ttft_start,
                         pd_response,
                     )
             else:
-                await self._run_prefill(request, q)
-                async for d_response in self._run_decode(request, q):
+                await self._process_request(ServerType.P_INSTANCE, request, q)
+                d_cluster = self.instance_clusters[ServerType.D_INSTANCE]
+                async for (
+                    d_response
+                ) in self._process_request_streaming_response(
+                    ServerType.D_INSTANCE, request, q
+                ):
                     yield self._to_request_output(d_response)
-                    ttft_recorded_flag = self.d_metrics_logger.cal_proxy_ttft(
+                    ttft_recorded_flag = d_cluster.cal_proxy_ttft(
                         ttft_recorded_flag,
                         proxy_ttft_start,
                         d_response,
@@ -665,22 +457,24 @@ class Proxy(EngineClient):
 
         await asyncio.gather(*tasks, return_exceptions=True)
 
-    def add_unhealthy_task(
-        self,
-        engine_type: ServerType,
-        discovery: HealthCheckServiceDiscovery,
-        request_stats_monitor: RequestStatsMonitor,
-        tasks: list[Any],
-    ) -> None:
-        unhealthy_endpoints = discovery.get_unhealth_endpoints()
-        if unhealthy_endpoints:
-            tasks.append(
-                self.abort_requests_from_unhealth_endpoints(
-                    server_type=engine_type,
-                    unhealth_endpoints=unhealthy_endpoints,
-                    request_stats_monitor=request_stats_monitor,
-                )
+    def add_unhealthy_task(self, engine_type, tasks):
+        """Return a Task to abort requests from unhealthy endpoints.
+
+        If there are no unhealthy endpoints, return None.
+        """
+        cluster = self.instance_clusters[engine_type]
+        unhealthy_endpoints = cluster.get_unhealthy_endpoints()
+
+        if not unhealthy_endpoints:
+            return
+
+        tasks.append(
+            self.abort_requests_from_unhealth_endpoints(
+                server_type=engine_type,
+                unhealth_endpoints=unhealthy_endpoints,
+                request_stats_monitor=cluster.stats_monitor,
             )
+        )
 
     async def _worker_register_handler(
         self, worker_register_req: WorkerRegisterRequest
@@ -689,14 +483,8 @@ class Proxy(EngineClient):
         address = worker_register_req.address
         server_type = worker_register_req.server_type
 
-        SERVER_TYPE_TO_SOCKET_MAP = {
-            ServerType.E_INSTANCE: self.to_encode_sockets,
-            ServerType.PD_INSTANCE: self.to_pd_sockets,
-            ServerType.P_INSTANCE: self.to_p_sockets,
-            ServerType.D_INSTANCE: self.to_d_sockets,
-        }
-        if server_type in SERVER_TYPE_TO_SOCKET_MAP:
-            socket_dict = SERVER_TYPE_TO_SOCKET_MAP[server_type]
+        if server_type in self.server_to_socket_map:
+            socket_dict = self.server_to_socket_map[server_type]
             if address not in socket_dict:
                 try:
                     socket = self.ctx.socket(zmq.constants.PUSH)
@@ -706,12 +494,10 @@ class Proxy(EngineClient):
                         f"Failed to connect to worker {address} with error: {e}"
                     )
                     return
-
-                cluster_lock = self._get_cluster_lock(server_type)
+                cluster_lock = self.instance_clusters[server_type].socket_lock
                 async with cluster_lock:
                     socket_dict[address] = socket
                     logger.info(f"Connected to worker {address} success")
-
         else:
             logger.error(
                 f"_worker_register_handler fail, unknown server type {server_type}"
@@ -733,39 +519,17 @@ class Proxy(EngineClient):
         metrics_decoder = msgspec.msgpack.Decoder(MetricsResponse)
         exit_decoder = msgspec.msgpack.Decoder(ExitRequest)
         worker_register_decoder = msgspec.msgpack.Decoder(WorkerRegisterRequest)
+
         try:
             socket = self.ctx.socket(zmq.constants.PULL)
             socket.bind(self.proxy_addr)
             timeout = self.health_check_interval * self.health_threshold / 2
 
             while True:
+                # To kill the failed requests quickly, we check unhealthy endpoints
                 tasks: list[asyncio.Task] = []
-                self.add_unhealthy_task(
-                    engine_type=ServerType.E_INSTANCE,
-                    discovery=self.encoder_service_discovery,
-                    request_stats_monitor=self.encoder_request_stats_monitor,
-                    tasks=tasks,
-                )
-                if self.is_pd_merged:
-                    self.add_unhealthy_task(
-                        engine_type=ServerType.PD_INSTANCE,
-                        discovery=self.pd_service_discovery,
-                        request_stats_monitor=self.pd_request_stats_monitor,
-                        tasks=tasks,
-                    )
-                else:
-                    self.add_unhealthy_task(
-                        engine_type=ServerType.P_INSTANCE,
-                        discovery=self.p_service_discovery,
-                        request_stats_monitor=self.p_request_stats_monitor,
-                        tasks=tasks,
-                    )
-                    self.add_unhealthy_task(
-                        engine_type=ServerType.D_INSTANCE,
-                        discovery=self.d_service_discovery,
-                        request_stats_monitor=self.d_request_stats_monitor,
-                        tasks=tasks,
-                    )
+                for engine_type in self.instance_clusters:
+                    self.add_unhealthy_task(engine_type, tasks)
 
                 if tasks:
                     await asyncio.gather(*tasks, return_exceptions=True)
@@ -884,15 +648,9 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.HEARTBEAT, payload)
-            try:
-                socket = await self._get_socket_and_server_types_from_addr(
-                    addr, server_type
-                )
-            except ValueError:
-                socket = None
-            if socket is None:
-                return None
-
+            socket = await self._get_socket_and_server_types_from_addr(
+                addr, server_type
+            )
             await socket.send_multipart(msg, copy=False)
             response = await q.get()
             if (
@@ -922,16 +680,10 @@ class Proxy(EngineClient):
         try:
             payload = self.encoder.encode(request)
             msg = (RequestType.METRICS, payload)
-
-            try:
-                socket = await self._get_socket_and_server_types_from_addr(
-                    addr, server_type
-                )
-            except ValueError:
-                socket = None
-
-            if socket is None:
-                return None
+            cluster = self.instance_clusters[server_type]
+            socket = await self._get_socket_and_server_types_from_addr(
+                addr, server_type
+            )
             await socket.send_multipart(msg, copy=False)
             response = await q.get()
             # calculate proxy to pd/encode time
@@ -942,30 +694,14 @@ class Proxy(EngineClient):
                 # calculate proxy to pd/encode time average
                 # add to metrics
                 proxy_ttft_avg: float = 0.0
-                if server_type == ServerType.E_INSTANCE:
-                    proxy2instance_avg = self.encoder_metrics_logger.get_avg_proxy_to_instance_time(
-                        addr
-                    )
-                elif server_type == ServerType.PD_INSTANCE:
-                    proxy2instance_avg = (
-                        self.pd_metrics_logger.get_avg_proxy_to_instance_time(
-                            addr
-                        )
-                    )
-                    proxy_ttft_avg = self.pd_metrics_logger.get_avg_proxy_ttft()
-                elif server_type == ServerType.P_INSTANCE:
-                    proxy2instance_avg = (
-                        self.p_metrics_logger.get_avg_proxy_to_instance_time(
-                            addr
-                        )
-                    )
-                elif server_type == ServerType.D_INSTANCE:
-                    proxy2instance_avg = (
-                        self.d_metrics_logger.get_avg_proxy_to_instance_time(
-                            addr
-                        )
-                    )
-                    proxy_ttft_avg = self.d_metrics_logger.get_avg_proxy_ttft()
+                proxy2instance_avg: float = (
+                    cluster.get_avg_proxy_to_instance_time(addr)
+                )
+                if server_type in [
+                    ServerType.PD_INSTANCE,
+                    ServerType.D_INSTANCE,
+                ]:
+                    proxy_ttft_avg = cluster.get_avg_proxy_ttft()
                 for engine_id in response.metrics:
                     response.metrics[engine_id].update(
                         {
@@ -1023,25 +759,6 @@ class Proxy(EngineClient):
             else None
         )
 
-    async def _await_with_timeout(
-        self,
-        request_id: str,
-        q: asyncio.Queue[Union[Exception, GenerationResponse]],
-    ) -> Union[Exception, GenerationResponse]:
-        """wait for response from queue with timeout handling."""
-        try:
-            resp = await asyncio.wait_for(
-                q.get(),
-                timeout=lm_service_envs.LM_SERVICE_REQUEST_TIMEOUT_SECONDS,
-            )
-            return resp
-        except asyncio.TimeoutError:
-            return RuntimeError(
-                f"Request {request_id} timed out "
-                f"after {lm_service_envs.LM_SERVICE_REQUEST_TIMEOUT_SECONDS}s "
-                f"without worker response."
-            )
-
     async def start_profile(self) -> None:
         raise NotImplementedError
 
@@ -1084,44 +801,21 @@ class Proxy(EngineClient):
         addr: str,
         server_type: ServerType,
     ) -> zmq.asyncio.Socket:
-        sockets_dict = {
-            ServerType.PD_INSTANCE: self.to_pd_sockets,
-            ServerType.P_INSTANCE: self.to_p_sockets,
-            ServerType.D_INSTANCE: self.to_d_sockets,
-            ServerType.E_INSTANCE: self.to_encode_sockets,
-        }
-        cluster_lock = self._get_cluster_lock(server_type)
+        cluster = self.instance_clusters[server_type]
+        cluster_lock = cluster.socket_lock
         async with cluster_lock:
-            sockets = sockets_dict.get(server_type, {})
-            socket = sockets.get(addr, None)
+            socket = cluster.sockets.get(addr)
         if socket:
             return socket
         raise ValueError(
-            f"Address {addr} not found in any server type sockets."
+            f"Address {addr} not found in any {server_type.name} sockets."
         )
-
-    def _get_cluster_lock(self, server_type: ServerType) -> asyncio.Lock:
-        if server_type == ServerType.E_INSTANCE:
-            return self._encode_cluster_lock
-        if server_type == ServerType.PD_INSTANCE:
-            return self._pd_cluster_lock
-        if server_type == ServerType.P_INSTANCE:
-            return self._p_cluster_lock
-        if server_type == ServerType.D_INSTANCE:
-            return self._d_cluster_lock
-        raise ValueError(f"No lock for server type {server_type}")
 
     async def _remove_instance_from_registry(
         self, addr: str, server_type: ServerType
     ) -> None:
-        if server_type == ServerType.E_INSTANCE:
-            await self.encoder_service_discovery.remove_instance(addr)
-        elif server_type == ServerType.PD_INSTANCE:
-            await self.pd_service_discovery.remove_instance(addr)
-        elif server_type == ServerType.P_INSTANCE:
-            await self.p_service_discovery.remove_instance(addr)
-        elif server_type == ServerType.D_INSTANCE:
-            await self.d_service_discovery.remove_instance(addr)
+        cluster = self.instance_clusters[server_type]
+        await cluster.service_discovery.remove_instance(addr)
 
 
 def _has_mm_data(prompt: PromptType) -> bool:
