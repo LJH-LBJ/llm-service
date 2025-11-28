@@ -213,9 +213,7 @@ class DisaggWorker:
             _force_log(), name="force_log"
         )
         self.running_requests.add(self._force_log_task)
-        self._force_log_task.add_done_callback(
-            self.running_requests.discard
-        )
+        self._force_log_task.add_done_callback(self.running_requests.discard)
         while not self.stopping:
             # poll for requests from proxy
             # if worker is stopping, exit the loop
