@@ -137,7 +137,6 @@ class DisaggWorker:
                 linger=lm_service_envs.LM_SERVICE_WORKER_GRACEFUL_EXIT_TIMEOUT_SEC
                 * 1000
             )
-        # TODO: use metastore_client.close()
         self.ctx.destroy()
 
         for running_request in self.running_requests:
@@ -201,23 +200,20 @@ class DisaggWorker:
             self.running_requests.add(discovery_task)
             discovery_task.add_done_callback(self.running_requests.discard)
 
-        if lm_service_envs.TIMECOUNT_ENABLED:
-            # log engine stats (logger stats and EPD stats (if enabled))
-            async def _force_log():
-                try:
-                    while True:
-                        await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
-                        await self.engine.do_log_stats()
-                except asyncio.CancelledError:
-                    pass
+        # log engine stats (logger stats and EPD stats (if enabled))
+        async def _force_log():
+            try:
+                while True:
+                    await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
+                    await self.engine.do_log_stats()
+            except asyncio.CancelledError:
+                pass
 
-            self._force_log_task = asyncio.create_task(
-                _force_log(), name="force_log"
-            )
-            self.running_requests.add(self._force_log_task)
-            self._force_log_task.add_done_callback(
-                self.running_requests.discard
-            )
+        self._force_log_task = asyncio.create_task(
+            _force_log(), name="force_log"
+        )
+        self.running_requests.add(self._force_log_task)
+        self._force_log_task.add_done_callback(self.running_requests.discard)
         while not self.stopping:
             # poll for requests from proxy
             # if worker is stopping, exit the loop

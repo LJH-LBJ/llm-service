@@ -290,10 +290,7 @@ class MetricsReporter:
             "Avg time to first token: %.3f ms, "
             "Avg proxy ttft: %.3f ms, "
         )
-        if self.server_type == ServerType.E_INSTANCE:
-            log_msg += "Avg proxy to encoder requests: %.3f ms, "
-        else:
-            log_msg += "Avg proxy to pd requests: %.3f ms, "
+        log_msg += "Avg proxy to instance requests time: %.3f ms, "
         msg = ""
         for work_addr, result in zip(self._instances.keys(), results):
             if isinstance(result, dict):
