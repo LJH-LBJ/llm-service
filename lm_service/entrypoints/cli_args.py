@@ -6,21 +6,12 @@ OpenAI-compatible server. It is kept in a separate file for documentation
 purposes.
 """
 
-import argparse
 import json
-import ssl
-from collections.abc import Sequence
-from dataclasses import field
-from typing import Literal
-
-from pydantic.dataclasses import dataclass
 
 from lm_service.logger_utils import init_logger
 
-from vllm.config import config
-from vllm.engine.arg_utils import AsyncEngineArgs, optional_type
-from vllm.entrypoints.openai.serving_models import LoRAModulePath
-from vllm.entrypoints.openai.tool_parsers import ToolParserManager
+from vllm.engine.arg_utils import AsyncEngineArgs
+from vllm.entrypoints.openai.cli_args import FrontendArgs
 from vllm.utils import FlexibleArgumentParser
 
 
@@ -78,5 +69,29 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
     )
     parser.add_argument("--model-name", required=True, help="Model name")
     parser.add_argument("--image-path", required=True, help="Path to the image")
+
+    parser.add_argument("model_tag",
+                        type=str,
+                        nargs="?",
+                        help="The model tag to serve "
+                        "(optional if specified in config)")
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        default=False,
+        help="Run in headless mode. See multi-node data parallel "
+        "documentation for more details.")
+    parser.add_argument("--api-server-count",
+                        "-asc",
+                        type=int,
+                        default=1,
+                        help="How many API server processes to run.")
+    parser.add_argument(
+        "--config",
+        help="Read CLI options from a config file. "
+        "Must be a YAML with the following options: "
+        "https://docs.vllm.ai/en/latest/configuration/serve_args.html")
+    parser = FrontendArgs.add_cli_args(parser)
+    parser = AsyncEngineArgs.add_cli_args(parser)
 
     return parser
