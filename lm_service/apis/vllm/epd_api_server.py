@@ -32,7 +32,9 @@ from vllm.entrypoints.openai.protocol import (
 )
 from vllm.entrypoints.utils import with_cancellation
 from vllm.engine.protocol import EngineClient
+from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.utils import FlexibleArgumentParser, decorate_logs
+from vllm.usage.usage_lib import UsageContext
 
 
 logger = init_logger(__name__)
@@ -126,7 +128,8 @@ async def run_server_worker(
     """Run a single worker of the API server."""
     async with build_async_proxy_client(args) as proxy_client:
         app = build_app(args)
-        await init_app_state(proxy_client, app.state, args)
+        vllm_config = proxy_client.vllm_config
+        await init_app_state(proxy_client, vllm_config, app.state, args)
         # app.state.engine_client = proxy_client
         logger.info(
             "Starting vLLM API server %d on %s",
@@ -142,9 +145,13 @@ async def run_server_worker(
 @asynccontextmanager
 async def build_async_proxy_client(
     args: Namespace,
+    usage_context: UsageContext = UsageContext.OPENAI_API_SERVER,
 ) -> AsyncIterator[EngineClient]:
     """Build the async engine client."""
+    proxy_args = AsyncEngineArgs.from_cli_args(args)
+    vllm_config = proxy_args.create_engine_config(usage_context=usage_context)
     p = Proxy(
+        vllm_config=vllm_config,
         proxy_addr=args.proxy_addr,
         encode_addr_list=args.encode_addr_list,
         pd_addr_list=args.pd_addr_list,

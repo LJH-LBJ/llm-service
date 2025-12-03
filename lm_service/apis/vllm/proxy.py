@@ -78,6 +78,7 @@ class Proxy(EngineClient):
 
     def __init__(
         self,
+        vllm_config: VllmConfig,
         proxy_addr: Optional[str] = None,
         encode_addr_list: Optional[list[str]] = None,
         pd_addr_list: Optional[list[str]] = None,
@@ -91,6 +92,7 @@ class Proxy(EngineClient):
         transfer_protocol: Optional[str] = None,
         metastore_client_config: Optional[dict] = None,
     ):
+        self.vllm_config = vllm_config
         self.instance_clusters: dict[ServerType, InstanceCluster] = {}
         self.queues: dict[str, asyncio.Queue] = {}
         # This "Encoder" is used for handling message types, not for "Encode - Prefill - Decode"
