@@ -20,7 +20,11 @@ from vllm.lora.request import LoRARequest
 from vllm.outputs import CompletionOutput, PoolingRequestOutput, RequestOutput
 from vllm.pooling_params import PoolingParams
 from vllm.sampling_params import SamplingParams
-from vllm.transformers_utils.tokenizer import AnyTokenizer
+from vllm.transformers_utils.tokenizer import (
+    AnyTokenizer,
+    init_tokenizer_from_configs,
+)
+from vllm.tasks import SupportedTask
 from vllm.utils import Device, get_ip, get_open_port
 from lm_service.protocol.protocol import (
     ExitRequest,
@@ -113,7 +117,8 @@ class Proxy(EngineClient):
         self.metastore_client: Optional[MetastoreClientBase] = None
         self.router = router
         self.is_pd_merged = True
-
+        self.tokenizer = init_tokenizer_from_configs(
+                model_config=vllm_config.model_config)
         # Dummy: needed for EngineClient Protocol.
         self.model_config = ModelConfig(
             model=model_name,
@@ -627,7 +632,10 @@ class Proxy(EngineClient):
         raise NotImplementedError
 
     async def get_tokenizer(self) -> AnyTokenizer:
-        raise NotImplementedError
+        if self.tokenizer is None:
+            raise ValueError("Unable to get tokenizer")
+
+        return self.tokenizer
 
     async def is_tracing_enabled(self) -> bool:
         return False
@@ -797,6 +805,9 @@ class Proxy(EngineClient):
 
     async def reset_mm_cache(self) -> None:
         raise NotImplementedError
+    
+    async def get_supported_tasks(self) -> tuple[SupportedTask, ...]:
+        return ("generate",)
 
     async def _get_socket_and_server_types_from_addr(
         self,
