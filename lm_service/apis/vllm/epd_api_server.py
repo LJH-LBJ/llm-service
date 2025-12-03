@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from http import HTTPStatus
 from typing import Any
 import uvloop
-from fastapi import APIRouter, Depends, FastAPI, Form, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from lm_service.entrypoints.cli_args import make_arg_parser
 from lm_service.apis.vllm.proxy import Proxy
@@ -25,17 +25,14 @@ from vllm.entrypoints.openai.api_server import (
     chat,
     base,
     engine_client,
-    ENDPOINT_LOAD_METRICS_FORMAT_HEADER_LABEL,
 )
 from vllm.entrypoints.openai.protocol import (
     ErrorResponse,
     ChatCompletionResponse,
 )
 from vllm.entrypoints.utils import with_cancellation
-from vllm.entrypoints.openai.orca_metrics import metrics_header
 from vllm.engine.protocol import EngineClient
-from vllm.utils.argparse_utils import FlexibleArgumentParser
-from vllm.utils.system_utils.py import decorate_logs
+from vllm.utils import FlexibleArgumentParser, decorate_logs
 
 
 logger = init_logger(__name__)

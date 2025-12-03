@@ -30,9 +30,14 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
     """Create the CLI argument parser used by the OpenAI API server.
     """
     parser.add_argument(
-        "--proxy-addr",
+        "--host",
         required=False,
-        help="The address of the proxy server.",
+        help="The host of the proxy server.",
+    )
+    parser.add_argument(
+        "--port",
+        required=False,
+        help="The port of the proxy server.",
     )
     parser.add_argument(
         "--encoder-addr-list",
