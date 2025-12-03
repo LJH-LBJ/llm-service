@@ -42,49 +42,47 @@ logger = init_logger(__name__)
 
 router = APIRouter()
 
-@router.post(
-    "/v1/chat/completions",
-    dependencies=[Depends(validate_json_request)],
-    responses={
-        HTTPStatus.OK.value: {"content": {"text/event-stream": {}}},
-        HTTPStatus.BAD_REQUEST.value: {"model": ErrorResponse},
-        HTTPStatus.NOT_FOUND.value: {"model": ErrorResponse},
-        HTTPStatus.INTERNAL_SERVER_ERROR.value: {"model": ErrorResponse},
-    },
-)
+@router.post("/v1/chat/completions",
+             dependencies=[Depends(validate_json_request)],
+             responses={
+                 HTTPStatus.OK.value: {
+                     "content": {
+                         "text/event-stream": {}
+                     }
+                 },
+                 HTTPStatus.BAD_REQUEST.value: {
+                     "model": ErrorResponse
+                 },
+                 HTTPStatus.NOT_FOUND.value: {
+                     "model": ErrorResponse
+                 },
+                 HTTPStatus.INTERNAL_SERVER_ERROR.value: {
+                     "model": ErrorResponse
+                 }
+             })
 @with_cancellation
-async def create_chat_completion(request: ChatCompletionRequest, raw_request: Request):
-    metrics_header_format = raw_request.headers.get(
-        ENDPOINT_LOAD_METRICS_FORMAT_HEADER_LABEL, ""
-    )
-
+async def create_chat_completion(request: ChatCompletionRequest,
+                                 raw_request: Request):
     handler = chat(raw_request)
     if handler is None:
         return base(raw_request).create_error_response(
-            message="The model does not support Chat Completions API"
-        )
-
+            message="The model does not support Chat Completions API")
     try:
         generator = await handler.create_chat_completion(request, raw_request)
     except Exception as e:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
-        ) from e
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
+                            detail=str(e)) from e
     if lm_service_envs.TIMECOUNT_ENABLED:
         # wait for logging
         proxy_client = engine_client(raw_request)
         asyncio.create_task(proxy_client.log_metrics())
     # non-streaming response
     if isinstance(generator, ErrorResponse):
-        return JSONResponse(
-            content=generator.model_dump(), status_code=generator.error.code
-        )
-    elif isinstance(generator, ChatCompletionResponse):
-        return JSONResponse(
-            content=generator.model_dump(),
-            headers=metrics_header(metrics_header_format),
-        )
+        return JSONResponse(content=generator.model_dump(),
+                            status_code=generator.error.code)
 
+    elif isinstance(generator, ChatCompletionResponse):
+        return JSONResponse(content=generator.model_dump())
     # streaming response
     return StreamingResponse(content=generator, media_type="text/event-stream")
 
