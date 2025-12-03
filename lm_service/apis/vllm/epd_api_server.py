@@ -102,7 +102,7 @@ async def serve_http(
     loop = asyncio.get_event_loop()
 
     # start the server
-    server_task = loop.create_task(server.serve(sock=[sock] if sock else None))
+    server_task = loop.create_task(server.serve(sockets=[sock] if sock else None))
 
     # handle SIGTERM for graceful shutdown
     def signal_handler() -> None:
@@ -159,7 +159,7 @@ async def build_async_proxy_client(
         d_addr_list=args.d_addr_list,
         transfer_protocol=args.transfer_protocol,
         metastore_client_config=args.metastore_client_config,
-        model_name=args.model_name,
+        model_name=args.model,
         enable_health_monitor=False,
     )
     yield p

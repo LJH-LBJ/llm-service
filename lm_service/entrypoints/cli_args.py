@@ -26,7 +26,7 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         help="Address for the proxy.",
     )
     parser.add_argument(
-        "--encoder-addr-list",
+        "--encode-addr-list",
         required=False,
         nargs="+",
         help="List of addresses for the encoder.",
@@ -62,7 +62,6 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         default=None,
         help="Enable metastore client config.",
     )
-    parser.add_argument("--model-name", required=True, help="Model name")
     parser.add_argument("--image-path", required=True, help="Path to the image")
 
     parser.add_argument("model_tag",
