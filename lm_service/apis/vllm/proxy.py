@@ -4,6 +4,7 @@
 import asyncio
 import os
 import time
+from PIL import Image
 import uuid
 from collections.abc import AsyncGenerator, Mapping
 from typing import Any, Optional, Union
@@ -82,7 +83,7 @@ class Proxy(EngineClient):
 
     def __init__(
         self,
-        vllm_config: VllmConfig,
+        vllm_config: Optional[VllmConfig] = None,
         proxy_addr: Optional[str] = None,
         encode_addr_list: Optional[list[str]] = None,
         pd_addr_list: Optional[list[str]] = None,
@@ -118,7 +119,7 @@ class Proxy(EngineClient):
         self.router = router
         self.is_pd_merged = True
         self.tokenizer = init_tokenizer_from_configs(
-                model_config=vllm_config.model_config)
+                model_config=vllm_config.model_config) if vllm_config else None
         # Dummy: needed for EngineClient Protocol.
         self.model_config = ModelConfig(
             model=model_name,
@@ -387,6 +388,8 @@ class Proxy(EngineClient):
             self.queues[request_id] = q
 
         # Support both raw string prompts and dict prompts with multimodal data
+        prompt["prompt"] = self.tokenizer.decode(prompt["prompt_token_ids"]) \
+            if hasattr(prompt, "prompt_token_ids") else prompt["prompt"]
         prompt_text = prompt["prompt"] if isinstance(prompt, dict) else prompt
 
         request = GenerationRequest(
@@ -850,5 +853,19 @@ def _encode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
                 "shape": img.shape,
                 "dtype": str(img.dtype),
             }
-            encoded_images.append(encoded_img)
+        elif isinstance(img, Image.Image):
+            # Convert PIL Image to numpy array
+            arr = np.array(img)
+            encoded_img = {
+                "type": "ndarray",
+                "data": arr.tobytes(),
+                "shape": arr.shape,
+                "dtype": str(arr.dtype),
+            }
+        else:
+            raise ValueError(
+                f"Unsupported image type: {type(img)}. "
+                "Supported types are numpy.ndarray and PIL.Image.Image."
+            )
+        encoded_images.append(encoded_img)
     return {"image": encoded_images}
