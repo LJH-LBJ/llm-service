@@ -85,6 +85,16 @@ async def create_chat_completion(request: ChatCompletionRequest,
     # streaming response
     return StreamingResponse(content=generator, media_type="text/event-stream")
 
+@router.post("/metrics", dependencies=[Depends(validate_json_request)])
+@with_cancellation
+async def metrics(raw_request: Request):
+    proxy_client = engine_client(raw_request)
+    try:
+        await proxy_client.get_metrics()
+    except Exception as e:
+        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
+                            detail=str(e)) from e
+
 async def run_server(args, **uvicorn_kwargs) -> None:
     """Run a single-worker API server."""
     decorate_logs("APIServer")
