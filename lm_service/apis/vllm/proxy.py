@@ -388,9 +388,10 @@ class Proxy(EngineClient):
             self.queues[request_id] = q
 
         # Support both raw string prompts and dict prompts with multimodal data
-        prompt["prompt"] = self.tokenizer.decode(prompt["prompt_token_ids"]) \
-            if hasattr(prompt, "prompt_token_ids") else prompt["prompt"]
-        prompt_text = prompt["prompt"] if isinstance(prompt, dict) else prompt
+        if "prompt_token_ids" in prompt and self.tokenizer:
+            prompt_text = self.tokenizer.decode(prompt["prompt_token_ids"]) 
+        else:
+            prompt_text = prompt["prompt"] if isinstance(prompt, dict) else prompt
 
         request = GenerationRequest(
             request_id=request_id,
