@@ -85,12 +85,12 @@ async def create_chat_completion(request: ChatCompletionRequest,
     # streaming response
     return StreamingResponse(content=generator, media_type="text/event-stream")
 
-@router.post("/metrics", dependencies=[Depends(validate_json_request)])
+@router.get("/v1/metrics")
 @with_cancellation
 async def metrics(raw_request: Request):
     proxy_client = engine_client(raw_request)
     try:
-        await proxy_client.get_metrics()
+        asyncio.create_task(proxy_client.log_metrics())
     except Exception as e:
         raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
                             detail=str(e)) from e
@@ -140,7 +140,7 @@ async def run_server_worker(
         app = build_app(args)
         vllm_config = proxy_client.vllm_config
         await init_app_state(proxy_client, vllm_config, app.state, args)
-        # app.state.engine_client = proxy_client
+        app.include_router(router)  # add API routes in this file
         logger.info(
             "Starting vLLM API server %d on %s",
             proxy_client.vllm_config.parallel_config._api_process_rank,
