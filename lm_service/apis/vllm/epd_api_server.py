@@ -140,11 +140,7 @@ async def run_server_worker(
         app = build_app(args)
         vllm_config = proxy_client.vllm_config
         await init_app_state(proxy_client, vllm_config, app.state, args)
-        # register startup event
-        @app.on_event("startup")
-        async def startup():
-            await app.state.proxy_client.start_output_handler_once()
-
+        await proxy_client.start_output_handler_once()
         app.include_router(router)  # add API routes in this file
         logger.info(
             "Starting vLLM API server %d on %s",

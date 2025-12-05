@@ -293,11 +293,6 @@ class Proxy(EngineClient):
             self.metastore_client.close()
 
     async def log_metrics(self) -> None:
-        # lazy initialization
-        if self.output_handler is None:
-            self.output_handler = asyncio.create_task(
-                self._run_output_handler()
-            )
         for server_type in self.instance_clusters:
             cluster = self.instance_clusters[server_type]
             await cluster.get_metrics()
