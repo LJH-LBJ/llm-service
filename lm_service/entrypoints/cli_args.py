@@ -62,7 +62,7 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         default=None,
         help="Enable metastore client config.",
     )
-    parser.add_argument("--image-path", required=True, help="Path to the image")
+    parser.add_argument("--image-path", required=False, help="Path to the image")
 
     parser.add_argument("model_tag",
                         type=str,
