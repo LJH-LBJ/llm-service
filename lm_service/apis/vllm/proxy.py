@@ -375,12 +375,6 @@ class Proxy(EngineClient):
         trace_headers: Optional[Mapping[str, str]] = None,
         priority: int = 0,
     ):
-        # lazy initialization
-        if self.output_handler is None:
-            self.output_handler = asyncio.create_task(
-                self._run_output_handler()
-            )
-
         # lazy init all health monitors
         for cluster in self.instance_clusters.values():
             cluster.lazy_init_health_monitor()
@@ -655,11 +649,6 @@ class Proxy(EngineClient):
         pass
 
     async def check_health(self, server_type: ServerType, addr: str):
-        # lazy initialization
-        if self.output_handler is None:
-            self.output_handler = asyncio.create_task(
-                self._run_output_handler()
-            )
         request_id = str(uuid.uuid4())
         request = HeartbeatRequest(
             request_id=request_id, proxy_addr=self.proxy_addr
@@ -746,11 +735,6 @@ class Proxy(EngineClient):
             self.queues.pop(request_id, None)
 
     async def handle_exit_from_worker(self, req: ExitRequest) -> None:
-        # lazy initialization
-        if self.output_handler is None:
-            self.output_handler = asyncio.create_task(
-                self._run_output_handler()
-            )
         server_type = req.server_type
 
         # stop routing new requests to it
