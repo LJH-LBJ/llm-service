@@ -1,4 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
+# SPDX-FileCopyrightText: Copyright contributors to the LM-Service project
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 import asyncio
 import signal
@@ -11,7 +12,7 @@ from http import HTTPStatus
 from typing import Any
 import uvloop
 from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request
-from fastapi.responses import JSONResponse, Response, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from lm_service.entrypoints.cli_args import make_arg_parser
 from lm_service.apis.vllm.proxy import Proxy
 from lm_service.logger_utils import init_logger
@@ -41,49 +42,47 @@ logger = init_logger(__name__)
 
 router = APIRouter()
 
-@router.post("/v1/chat/completions",
-             dependencies=[Depends(validate_json_request)],
-             responses={
-                 HTTPStatus.OK.value: {
-                     "content": {
-                         "text/event-stream": {}
-                     }
-                 },
-                 HTTPStatus.BAD_REQUEST.value: {
-                     "model": ErrorResponse
-                 },
-                 HTTPStatus.NOT_FOUND.value: {
-                     "model": ErrorResponse
-                 },
-                 HTTPStatus.INTERNAL_SERVER_ERROR.value: {
-                     "model": ErrorResponse
-                 }
-             })
+
+@router.post(
+    "/v1/chat/completions",
+    dependencies=[Depends(validate_json_request)],
+    responses={
+        HTTPStatus.OK.value: {"content": {"text/event-stream": {}}},
+        HTTPStatus.BAD_REQUEST.value: {"model": ErrorResponse},
+        HTTPStatus.NOT_FOUND.value: {"model": ErrorResponse},
+        HTTPStatus.INTERNAL_SERVER_ERROR.value: {"model": ErrorResponse},
+    },
+)
 @with_cancellation
-async def create_chat_completion(request: ChatCompletionRequest,
-                                 raw_request: Request):
+async def create_chat_completion(
+    request: ChatCompletionRequest, raw_request: Request
+):
     handler = chat(raw_request)
     if handler is None:
         return base(raw_request).create_error_response(
-            message="The model does not support Chat Completions API")
+            message="The model does not support Chat Completions API"
+        )
     try:
         generator = await handler.create_chat_completion(request, raw_request)
     except Exception as e:
-        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
-                            detail=str(e)) from e
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
+        ) from e
     if lm_service_envs.TIMECOUNT_ENABLED:
         # wait for logging
         proxy_client = engine_client(raw_request)
         asyncio.create_task(proxy_client.log_metrics())
     # non-streaming response
     if isinstance(generator, ErrorResponse):
-        return JSONResponse(content=generator.model_dump(),
-                            status_code=generator.error.code)
+        return JSONResponse(
+            content=generator.model_dump(), status_code=generator.error.code
+        )
 
     elif isinstance(generator, ChatCompletionResponse):
         return JSONResponse(content=generator.model_dump())
     # streaming response
     return StreamingResponse(content=generator, media_type="text/event-stream")
+
 
 @router.get("/v1/metrics")
 @with_cancellation
@@ -92,8 +91,10 @@ async def metrics(raw_request: Request):
     try:
         asyncio.create_task(proxy_client.log_metrics())
     except Exception as e:
-        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
-                            detail=str(e)) from e
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
+        ) from e
+
 
 async def run_server(args, **uvicorn_kwargs) -> None:
     """Run a single-worker API server."""
@@ -101,10 +102,11 @@ async def run_server(args, **uvicorn_kwargs) -> None:
     listen_address, sock = setup_server(args)
     await run_server_worker(listen_address, sock, args, **uvicorn_kwargs)
 
+
 async def serve_http(
-        app: FastAPI,
-        sock: socket.socket | None,
-        **uvicorn_kwargs: Any,
+    app: FastAPI,
+    sock: socket.socket | None,
+    **uvicorn_kwargs: Any,
 ):
     """Serve the HTTP app using Uvicorn."""
     config = uvicorn.Config(app, **uvicorn_kwargs)
@@ -112,15 +114,19 @@ async def serve_http(
     loop = asyncio.get_event_loop()
 
     # start the server
-    server_task = loop.create_task(server.serve(sockets=[sock] if sock else None))
+    server_task = loop.create_task(
+        server.serve(sockets=[sock] if sock else None)
+    )
 
     # handle SIGTERM for graceful shutdown
     def signal_handler() -> None:
         server_task.cancel()
+
     loop.add_signal_handler(signal.SIGTERM, signal_handler)
 
     async def dummy_shutdown() -> None:
         pass
+
     try:
         await server_task
         return dummy_shutdown
@@ -153,6 +159,7 @@ async def run_server_worker(
     finally:
         sock.close()
 
+
 @asynccontextmanager
 async def build_async_proxy_client(
     args: Namespace,
@@ -175,6 +182,7 @@ async def build_async_proxy_client(
     )
     yield p
     p.shutdown()
+
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser()

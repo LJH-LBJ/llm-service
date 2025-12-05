@@ -118,8 +118,11 @@ class Proxy(EngineClient):
         self.metastore_client: Optional[MetastoreClientBase] = None
         self.router = router
         self.is_pd_merged = True
-        self.tokenizer = init_tokenizer_from_configs(
-                model_config=vllm_config.model_config) if vllm_config else None
+        self.tokenizer = (
+            init_tokenizer_from_configs(model_config=vllm_config.model_config)
+            if vllm_config
+            else None
+        )
         # Dummy: needed for EngineClient Protocol.
         self.model_config = ModelConfig(
             model=model_name,
@@ -390,9 +393,11 @@ class Proxy(EngineClient):
 
         # Support both raw string prompts and dict prompts with multimodal data
         if "prompt_token_ids" in prompt and self.tokenizer:
-            prompt_text = self.tokenizer.decode(prompt["prompt_token_ids"]) 
+            prompt_text = self.tokenizer.decode(prompt["prompt_token_ids"])
         else:
-            prompt_text = prompt["prompt"] if isinstance(prompt, dict) else prompt
+            prompt_text = (
+                prompt["prompt"] if isinstance(prompt, dict) else prompt
+            )
 
         request = GenerationRequest(
             request_id=request_id,
@@ -800,7 +805,7 @@ class Proxy(EngineClient):
 
     async def reset_mm_cache(self) -> None:
         raise NotImplementedError
-    
+
     async def get_supported_tasks(self) -> tuple[SupportedTask, ...]:
         return ("generate",)
 
