@@ -271,6 +271,13 @@ class Proxy(EngineClient):
             socket_lock=lock,
         )
 
+    # initialization of output handler
+    async def start_output_handler_once(self) -> None:
+        if self.output_handler is None:
+            self.output_handler = asyncio.create_task(
+                self._run_output_handler()
+            )
+
     def shutdown(self):
         self.ctx.destroy()
         if (task := self.output_handler) is not None:
