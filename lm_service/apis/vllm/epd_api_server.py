@@ -148,10 +148,12 @@ async def metrics(raw_request: Request):
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
         ) from e
 
+
 @router.get("/abort")
 @with_cancellation
 async def abort(raw_request: Request):
     pass
+
 
 if envs.VLLM_TORCH_PROFILER_DIR:
 
