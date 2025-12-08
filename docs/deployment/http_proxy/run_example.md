@@ -1,6 +1,6 @@
 多个proxy需要启动多个http server
 
-### 非radis启动命令
+### 非radix启动命令
 
 ```
 VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
@@ -13,7 +13,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
     --allowed-local-media-path /workspace/l00807937/EPD_Timecount_v0.11.0/image/
 ```
 
-### radis启动命令
+### radix启动命令
 
 ```
 VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \

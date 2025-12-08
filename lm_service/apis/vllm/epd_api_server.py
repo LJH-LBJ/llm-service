@@ -134,7 +134,9 @@ async def create_completion(
 
 @router.get("/{server_type}/{addr:path}/check_health")
 @with_cancellation
-async def check_health(server_type: ServerType, addr: str, raw_request: Request):
+async def check_health(
+    server_type: ServerType, addr: str, raw_request: Request
+):
     proxy_client = engine_client(raw_request)
     try:
         response = await asyncio.wait_for(
@@ -147,7 +149,7 @@ async def check_health(server_type: ServerType, addr: str, raw_request: Request)
         raise HTTPException(
             status_code=HTTPStatus.GATEWAY_TIMEOUT.value,
             detail="Health check timed out",
-    )
+        )
     except Exception as e:
         raise HTTPException(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
