@@ -138,7 +138,9 @@ async def check_health(
     server_type: ServerType, addr: str, raw_request: Request
 ):
     proxy_client = engine_client(raw_request)
-    service_discovery = proxy_client.instance_clusters[server_type].service_discovery
+    service_discovery = proxy_client.instance_clusters[
+        server_type
+    ].service_discovery
     check_health = service_discovery._health_check_func
     health_check_interval = service_discovery._health_check_interval
     try:
