@@ -138,10 +138,13 @@ async def check_health(
     server_type: ServerType, addr: str, raw_request: Request
 ):
     proxy_client = engine_client(raw_request)
+    service_discovery = proxy_client.instance_clusters[server_type].service_discovery
+    check_health = service_discovery._health_check_func
+    health_check_interval = service_discovery._health_check_interval
     try:
         response = await asyncio.wait_for(
-            proxy_client.check_health(server_type, addr),
-            timeout=proxy_client._health_check_interval,
+            check_health(server_type, addr),
+            timeout=health_check_interval,
         )
         return JSONResponse(content={"results": response})
 
