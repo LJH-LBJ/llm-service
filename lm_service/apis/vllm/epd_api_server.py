@@ -86,24 +86,17 @@ async def create_chat_completion(
     # streaming response
     return StreamingResponse(content=generator, media_type="text/event-stream")
 
-@router.post("/v1/completions",
-             dependencies=[Depends(validate_json_request)],
-             responses={
-                 HTTPStatus.OK.value: {
-                     "content": {
-                         "text/event-stream": {}
-                     }
-                 },
-                 HTTPStatus.BAD_REQUEST.value: {
-                     "model": ErrorResponse
-                 },
-                 HTTPStatus.NOT_FOUND.value: {
-                     "model": ErrorResponse
-                 },
-                 HTTPStatus.INTERNAL_SERVER_ERROR.value: {
-                     "model": ErrorResponse
-                 },
-             })
+
+@router.post(
+    "/v1/completions",
+    dependencies=[Depends(validate_json_request)],
+    responses={
+        HTTPStatus.OK.value: {"content": {"text/event-stream": {}}},
+        HTTPStatus.BAD_REQUEST.value: {"model": ErrorResponse},
+        HTTPStatus.NOT_FOUND.value: {"model": ErrorResponse},
+        HTTPStatus.INTERNAL_SERVER_ERROR.value: {"model": ErrorResponse},
+    },
+)
 @with_cancellation
 async def create_completion(
     request: ChatCompletionRequest, raw_request: Request
@@ -116,28 +109,33 @@ async def create_completion(
     try:
         generator = await handler.create_chat_completion(request, raw_request)
     except OverflowError as e:
-        raise HTTPException(status_code=HTTPStatus.BAD_REQUEST.value,
-                            detail=str(e)) from e
+        raise HTTPException(
+            status_code=HTTPStatus.BAD_REQUEST.value, detail=str(e)
+        ) from e
     except Exception as e:
-        raise HTTPException(status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
-                            detail=str(e)) from e
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
+        ) from e
     if lm_service_envs.TIMECOUNT_ENABLED:
         # wait for logging
         proxy_client = engine_client(raw_request)
         asyncio.create_task(proxy_client.log_metrics())
     # non-streaming response
     if isinstance(generator, ErrorResponse):
-        return JSONResponse(content=generator.model_dump(),
-                            status_code=generator.error.code)
+        return JSONResponse(
+            content=generator.model_dump(), status_code=generator.error.code
+        )
     elif isinstance(generator, CompletionResponse):
         return JSONResponse(content=generator.model_dump())
     # streaming response
     return StreamingResponse(content=generator, media_type="text/event-stream")
 
+
 @router.get("/check_health")
 @with_cancellation
 async def check_health(raw_request: Request):
     pass
+
 
 @router.get("/v1/metrics")
 @with_cancellation
@@ -150,7 +148,9 @@ async def metrics(raw_request: Request):
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
         ) from e
 
+
 if envs.VLLM_TORCH_PROFILER_DIR:
+
     @router.get("/start_profile")
     async def start_profile(raw_request: Request):
         pass
