@@ -16,6 +16,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from lm_service.entrypoints.cli_args import make_arg_parser
 from lm_service.apis.vllm.proxy import Proxy
 from lm_service.logger_utils import init_logger
+from lm_service.protocol.protocol import ServerType
 import lm_service.envs as lm_service_envs
 from vllm.entrypoints.openai.api_server import (
     validate_json_request,
@@ -131,10 +132,27 @@ async def create_completion(
     return StreamingResponse(content=generator, media_type="text/event-stream")
 
 
-@router.get("/check_health")
+@router.get("/{server_type}/{addr:path}/check_health")
 @with_cancellation
-async def check_health(raw_request: Request):
-    pass
+async def check_health(server_type: ServerType, addr: str, raw_request: Request):
+    proxy_client = engine_client(raw_request)
+    try:
+        response = await asyncio.wait_for(
+            proxy_client.check_health(server_type, addr),
+            timeout=proxy_client._health_check_interval,
+        )
+        return JSONResponse(content={"results": response})
+
+    except asyncio.TimeoutError:
+        raise HTTPException(
+            status_code=HTTPStatus.GATEWAY_TIMEOUT.value,
+            detail="Health check timed out",
+    )
+    except Exception as e:
+        raise HTTPException(
+            status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
+            detail=str(e),
+        ) from e
 
 
 @router.get("/v1/metrics")
