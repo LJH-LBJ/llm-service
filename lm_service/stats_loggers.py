@@ -268,7 +268,7 @@ class MetricsReporter:
         self.proxy_ttft_total += time.perf_counter() - start
         return True
 
-    async def get_metrics(self, log_output: bool=True):
+    async def get_metrics(self, log_output: bool = True):
         # metrics: [addr, metrics_msg or error_msg]
         metrics = await self.build_metrics_msg()
         if log_output:
@@ -283,12 +283,11 @@ class MetricsReporter:
             return None
         else:
             return metrics
-        
 
     async def build_metrics_msg(
         self,
         results: Optional[dict[int, dict[str, Union[int, float]]]],
-    ) -> dict[str, Union[dict[str, float], str]]:
+    ) -> dict[str, dict[str, float] | str]:
         metrics = {}
         tasks = [
             asyncio.create_task(
@@ -335,7 +334,7 @@ class MetricsReporter:
             else:
                 error_msg = (
                     f"Get metrics for {self.server_type} {work_addr} failed, reason is "
-                    f"({ 'timeout' if isinstance(result, asyncio.TimeoutError) else result }).\n"
+                    f"({'timeout' if isinstance(result, asyncio.TimeoutError) else result}).\n"
                 )
                 metrics[work_addr] = error_msg
         return metrics

@@ -24,8 +24,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from lm_service.entrypoints.cli_args import make_arg_parser
 from lm_service.apis.vllm.proxy import Proxy
 from lm_service.logger_utils import init_logger
-from lm_service.protocol.protocol import ServerType
-import lm_service.envs as lm_service_envs
 from lm_service.service_discovery import HealthCheckServiceDiscovery
 from vllm.entrypoints.openai.api_server import (
     validate_json_request,
@@ -63,6 +61,7 @@ async def lifespan(app: FastAPI):
         yield
     finally:
         del app.state
+
 
 @router.post(
     "/v1/chat/completions",
@@ -147,11 +146,13 @@ async def check_health(raw_request: Request):
     proxy_client: EngineClient = engine_client(raw_request)
     results: dict[str, str] = {}
     for server_type in proxy_client.active_types:
-        sockets: dict[str, zmq.asyncio.Socket] = \
+        sockets: dict[str, zmq.asyncio.Socket] = (
             proxy_client.server_to_socket_map.get(server_type)
+        )
         for addr in sockets:
-            service_discovery: HealthCheckServiceDiscovery = \
+            service_discovery: HealthCheckServiceDiscovery = (
                 proxy_client.instance_clusters[server_type].service_discovery
+            )
             check_health = service_discovery._health_check_func
             health_check_interval = service_discovery._health_check_interval
             try:
@@ -159,8 +160,9 @@ async def check_health(raw_request: Request):
                     check_health(server_type, addr),
                     timeout=health_check_interval,
                 )
-                results[str(server_type.name) + addr] = \
+                results[str(server_type.name) + addr] = (
                     "Healthy" if result else "Unhealthy"
+                )
             except asyncio.TimeoutError:
                 raise HTTPException(
                     status_code=HTTPStatus.GATEWAY_TIMEOUT.value,
@@ -270,11 +272,7 @@ async def run_server_worker(
             listen_address,
         )
         shutdown_task = await serve_http(
-            app,
-            sock,
-            host=args.host,
-            port=args.port,
-            **uvicorn_kwargs
+            app, sock, host=args.host, port=args.port, **uvicorn_kwargs
         )
     try:
         await shutdown_task()
@@ -312,6 +310,7 @@ def build_app(args: Namespace) -> FastAPI:
     app = FastAPI(lifespan=lifespan)
     app.include_router(router)
     return app
+
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser()
