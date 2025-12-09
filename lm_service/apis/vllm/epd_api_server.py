@@ -11,7 +11,14 @@ from contextlib import asynccontextmanager
 from http import HTTPStatus
 from typing import Any
 import uvloop
-from fastapi import APIRouter, Depends, FastAPI, HTTPException, Request, Response
+from fastapi import (
+    APIRouter,
+    Depends,
+    FastAPI,
+    HTTPException,
+    Request,
+    Response,
+)
 from fastapi.responses import JSONResponse, StreamingResponse
 from lm_service.entrypoints.cli_args import make_arg_parser
 from lm_service.apis.vllm.proxy import Proxy
@@ -134,9 +141,7 @@ async def create_completion(
 
 @router.get("/{server_type}/{addr:path}/check_health")
 @with_cancellation
-async def check_health(
-    server_type: str, addr: str, raw_request: Request
-):
+async def check_health(server_type: str, addr: str, raw_request: Request):
     server_type = ServerType.from_value(server_type)
     proxy_client = engine_client(raw_request)
     service_discovery = proxy_client.instance_clusters[
