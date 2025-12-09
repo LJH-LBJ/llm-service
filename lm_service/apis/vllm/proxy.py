@@ -389,10 +389,6 @@ class Proxy(EngineClient):
                 self._run_output_handler()
             )
 
-        # lazy init all health monitors
-        for cluster in self.instance_clusters.values():
-            cluster.lazy_init_health_monitor()
-
         if not request_id:
             request_id = uuid.uuid4().hex
 
