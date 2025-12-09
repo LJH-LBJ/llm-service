@@ -7,7 +7,6 @@ from typing import Any, Optional, Union
 import msgspec
 from vllm import SamplingParams
 from vllm.outputs import RequestOutput
-from vllm.engine.protocol import EngineClient
 
 # NOTE FOR DEVELOPERS:
 # DO NOT USE PICKLE FOR THESE CLASSES. IN A MULTI NODE
@@ -23,7 +22,7 @@ class ServerType(Enum):
     PROXY = auto()
 
     @classmethod
-    def from_value(cls, engine: EngineClient, value: str) -> "ServerType":
+    def from_value(cls, value: str) -> "ServerType":
         """Parse `value` as a ServerType name or numeric value.
 
         Examples:
@@ -37,8 +36,6 @@ class ServerType(Enum):
 
         # try name lookup (case-insensitive), allow hyphens
         try:
-            if not text.startswith(engine.transfer_protocol):
-                text = engine.transfer_protocol + "://" + text
             return cls[text.replace("-", "_").upper()]
         except KeyError:
             pass

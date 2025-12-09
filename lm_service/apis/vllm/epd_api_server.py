@@ -143,7 +143,9 @@ async def create_completion(
 @with_cancellation
 async def check_health(server_type: str, addr: str, raw_request: Request):
     proxy_client = engine_client(raw_request)
-    server_type_enum = ServerType.from_value(proxy_client, server_type)
+    server_type_enum = ServerType.from_value(server_type)
+    if not addr.startswith(proxy_client.transfer_protocol):
+        addr = proxy_client.transfer_protocol + "://" + addr
     service_discovery = proxy_client.instance_clusters[
         server_type_enum
     ].service_discovery
