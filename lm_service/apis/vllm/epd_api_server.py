@@ -142,16 +142,16 @@ async def create_completion(
 @router.get("/{server_type}/{addr:path}/check_health")
 @with_cancellation
 async def check_health(server_type: str, addr: str, raw_request: Request):
-    server_type = ServerType.from_value(server_type)
+    server_type_enum = ServerType.from_value(server_type)
     proxy_client = engine_client(raw_request)
     service_discovery = proxy_client.instance_clusters[
-        server_type
+        server_type_enum
     ].service_discovery
     check_health = service_discovery._health_check_func
     health_check_interval = service_discovery._health_check_interval
     try:
         response = await asyncio.wait_for(
-            check_health(server_type, addr),
+            check_health(server_type_enum, addr),
             timeout=health_check_interval,
         )
         return JSONResponse(content={"results": response})
