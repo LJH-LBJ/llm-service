@@ -1,8 +1,8 @@
-多个proxy需要启动多个http server
+# 多个proxy需要启动多个http server
 
 ### 非radix启动命令
 
-```
+```bash
 VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
     --model /workspace/models/Qwen2.5-VL-7B-Instruct \
     --proxy-addr /tmp/proxy \
@@ -15,7 +15,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
 
 ### radix启动命令
 
-```
+```bash
 VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
     --model /workspace/models/Qwen2.5-VL-7B-Instruct \
     --port 5580 \
@@ -29,7 +29,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
 
 ### 发送请求
 
-```
+```bash
 curl -X POST  http://127.0.0.1:5580/v1/chat/completions \
     -H "Content-Type: application/json" \
     -d '{
