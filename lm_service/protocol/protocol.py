@@ -21,6 +21,19 @@ class ServerType(Enum):
     D_INSTANCE = auto()
     PROXY = auto()
 
+    @classmethod
+    def from_value(cls, value: str) -> "ServerType":
+        try:
+            # search by name
+            return ServerType[value.upper()]
+        except KeyError:
+            pass
+        try:
+            # search by value
+            int_value = int(value)
+            return ServerType(int_value)
+        except (IndexError, ValueError):
+            raise ValueError(f"Invalid ServerType value: {value}")
 
 class RequestType:
     GENERATION = b"\x00"

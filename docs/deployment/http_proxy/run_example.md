@@ -1,6 +1,6 @@
 # 多个proxy需要启动多个http server
 
-### 非radix启动命令
+## 非radix启动命令
 
 ```bash
 VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
@@ -13,7 +13,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
     --allowed-local-media-path /workspace/l00807937/EPD_Timecount_v0.11.0/image/
 ```
 
-### radix启动命令
+## radix启动命令
 
 ```bash
 VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
@@ -27,7 +27,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
     --allowed-local-media-path /workspace/l00807937/EPD_Timecount_v0.11.0/image/
 ```
 
-### 发送请求
+## 发送请求
 
 ```bash
 curl -X POST  http://127.0.0.1:5580/v1/chat/completions \
