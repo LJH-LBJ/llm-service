@@ -45,7 +45,9 @@ class ServerType(Enum):
             return cls(int(text))
         except (ValueError, TypeError):
             valid = ", ".join(m.name for m in cls)
-            raise ValueError(f"Invalid ServerType value: {value!r}. Valid names: {valid}")
+            raise ValueError(
+                f"Invalid ServerType value: {value!r}. Valid names: {valid}"
+            )
 
 
 class RequestType:
