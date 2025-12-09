@@ -142,8 +142,8 @@ async def create_completion(
 @router.get("/{server_type}/{addr:path}/check_health")
 @with_cancellation
 async def check_health(server_type: str, addr: str, raw_request: Request):
-    server_type_enum = ServerType.from_value(server_type)
     proxy_client = engine_client(raw_request)
+    server_type_enum = ServerType.from_value(proxy_client, server_type)
     service_discovery = proxy_client.instance_clusters[
         server_type_enum
     ].service_discovery
