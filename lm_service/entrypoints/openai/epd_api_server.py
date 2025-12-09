@@ -4,6 +4,7 @@
 import asyncio
 import signal
 import socket
+import zmq
 import uvicorn
 from argparse import Namespace
 from collections.abc import AsyncIterator
@@ -25,11 +26,11 @@ from lm_service.apis.vllm.proxy import Proxy
 from lm_service.logger_utils import init_logger
 from lm_service.protocol.protocol import ServerType
 import lm_service.envs as lm_service_envs
+from lm_service.service_discovery import HealthCheckServiceDiscovery
 from vllm.entrypoints.openai.api_server import (
     validate_json_request,
     ChatCompletionRequest,
     setup_server,
-    build_app,
     init_app_state,
     chat,
     completion,
@@ -47,12 +48,21 @@ from vllm.engine.protocol import EngineClient
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.utils import FlexibleArgumentParser, decorate_logs
 from vllm.usage.usage_lib import UsageContext
+from vllm.utils.network_utils import find_process_using_port
 
 
 logger = init_logger(__name__)
 
 router = APIRouter()
 
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Lifespan context manager for FastAPI app."""
+    try:
+        yield
+    finally:
+        del app.state
 
 @router.post(
     "/v1/chat/completions",
@@ -79,10 +89,6 @@ async def create_chat_completion(
         raise HTTPException(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
         ) from e
-    if lm_service_envs.TIMECOUNT_ENABLED:
-        # wait for logging
-        proxy_client = engine_client(raw_request)
-        asyncio.create_task(proxy_client.log_metrics())
     # non-streaming response
     if isinstance(generator, ErrorResponse):
         return JSONResponse(
@@ -124,10 +130,6 @@ async def create_completion(
         raise HTTPException(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
         ) from e
-    if lm_service_envs.TIMECOUNT_ENABLED:
-        # wait for logging
-        proxy_client = engine_client(raw_request)
-        asyncio.create_task(proxy_client.log_metrics())
     # non-streaming response
     if isinstance(generator, ErrorResponse):
         return JSONResponse(
@@ -139,44 +141,47 @@ async def create_completion(
     return StreamingResponse(content=generator, media_type="text/event-stream")
 
 
-@router.get("/{server_type}/{addr:path}/check_health")
+@router.get("/check_health")
 @with_cancellation
-async def check_health(server_type: str, addr: str, raw_request: Request):
-    proxy_client = engine_client(raw_request)
-    server_type_enum = ServerType.from_value(server_type)
-    if not addr.startswith(proxy_client.transfer_protocol):
-        addr = proxy_client.transfer_protocol + "://" + addr
-    service_discovery = proxy_client.instance_clusters[
-        server_type_enum
-    ].service_discovery
-    check_health = service_discovery._health_check_func
-    health_check_interval = service_discovery._health_check_interval
-    try:
-        response = await asyncio.wait_for(
-            check_health(server_type_enum, addr),
-            timeout=health_check_interval,
-        )
-        return JSONResponse(content={"results": response})
+async def check_health(raw_request: Request):
+    proxy_client: EngineClient = engine_client(raw_request)
+    results: dict[str, str] = {}
+    for server_type in proxy_client.active_types:
+        sockets: dict[str, zmq.asyncio.Socket] = \
+            proxy_client.server_to_socket_map.get(server_type)
+        for addr in sockets:
+            service_discovery: HealthCheckServiceDiscovery = \
+                proxy_client.instance_clusters[server_type].service_discovery
+            check_health = service_discovery._health_check_func
+            health_check_interval = service_discovery._health_check_interval
+            try:
+                result: bool = await asyncio.wait_for(
+                    check_health(server_type, addr),
+                    timeout=health_check_interval,
+                )
+                results[str(server_type.name) + addr] = \
+                    "Healthy" if result else "Unhealthy"
+            except asyncio.TimeoutError:
+                raise HTTPException(
+                    status_code=HTTPStatus.GATEWAY_TIMEOUT.value,
+                    detail="Health check timed out",
+                )
+            except Exception as e:
+                raise HTTPException(
+                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
+                    detail=str(e),
+                ) from e
+    return JSONResponse(content={"results": results})
 
-    except asyncio.TimeoutError:
-        raise HTTPException(
-            status_code=HTTPStatus.GATEWAY_TIMEOUT.value,
-            detail="Health check timed out",
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
-            detail=str(e),
-        ) from e
 
-
-@router.get("/v1/metrics")
+@router.get("/metrics")
 @with_cancellation
 async def metrics(raw_request: Request):
-    proxy_client = engine_client(raw_request)
+    proxy_client: EngineClient = engine_client(raw_request)
     try:
-        asyncio.create_task(proxy_client.log_metrics())
-        return Response(status_code=HTTPStatus.OK.value)
+        # total_metrics: [server_type [addr, metrics_msg or error_msg]]
+        total_metrics = await proxy_client.log_metrics(log_output=False)
+        return Response(status_code=HTTPStatus.OK.value, detail=total_metrics)
     except Exception as e:
         raise HTTPException(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
@@ -235,7 +240,16 @@ async def serve_http(
         await server_task
         return dummy_shutdown
     except asyncio.CancelledError:
-        logger.info("HTTP server has been cancelled.")
+        port = uvicorn_kwargs["port"]
+        process = find_process_using_port(port)
+        if process is not None:
+            logger.warning(
+                "port %s is used by process %s launched with command:\n%s",
+                port,
+                process,
+                " ".join(process.cmdline()),
+            )
+        logger.info("Shutting down FastAPI HTTP server.")
         return server.shutdown()
 
 
@@ -250,13 +264,18 @@ async def run_server_worker(
         app = build_app(args)
         vllm_config = proxy_client.vllm_config
         await init_app_state(proxy_client, vllm_config, app.state, args)
-        app.include_router(router)  # add API routes in this file
         logger.info(
             "Starting vLLM API server %d on %s",
             proxy_client.vllm_config.parallel_config._api_process_rank,
             listen_address,
         )
-        shutdown_task = await serve_http(app, sock, **uvicorn_kwargs)
+        shutdown_task = await serve_http(
+            app,
+            sock,
+            host=args.host,
+            port=args.port,
+            **uvicorn_kwargs
+        )
     try:
         await shutdown_task()
     finally:
@@ -280,12 +299,19 @@ async def build_async_proxy_client(
         d_addr_list=args.d_addr_list,
         transfer_protocol=args.transfer_protocol,
         metastore_client_config=args.metastore_client_config,
+        log_stats=not args.disable_log_stats,
         model_name=args.model,
         enable_health_monitor=False,
     )
     yield p
     p.shutdown()
 
+
+def build_app(args: Namespace) -> FastAPI:
+    """Build the FastAPI app."""
+    app = FastAPI(lifespan=lifespan)
+    app.include_router(router)
+    return app
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser()

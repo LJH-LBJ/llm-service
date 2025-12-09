@@ -92,6 +92,12 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         "Must be a YAML with the following options: "
         "https://docs.vllm.ai/en/latest/configuration/serve_args.html",
     )
+    parser.add_argument(
+        "--disable-log-stats",
+        action="store_true",
+        default=True,
+        help="Disable logging of statistics.",
+    )
     parser = FrontendArgs.add_cli_args(parser)
     parser = AsyncEngineArgs.add_cli_args(parser)
 

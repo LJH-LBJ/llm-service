@@ -268,7 +268,27 @@ class MetricsReporter:
         self.proxy_ttft_total += time.perf_counter() - start
         return True
 
-    async def get_metrics(self) -> None:
+    async def get_metrics(self, log_output: bool=True):
+        # metrics: [addr, metrics_msg or error_msg]
+        metrics = await self.build_metrics_msg()
+        if log_output:
+            logger.info("Metrics for %s instances:" % self.server_type)
+            for msg in metrics.values():
+                # error msg
+                if isinstance(msg, str):
+                    logger.error(msg)
+                # metrics msg
+                else:
+                    logger.info(msg)
+            return None
+        else:
+            return metrics
+        
+
+    async def build_metrics_msg(
+        self,
+        results: Optional[dict[int, dict[str, Union[int, float]]]],
+    ) -> dict[str, Union[dict[str, float], str]]:
         metrics = {}
         tasks = [
             asyncio.create_task(
@@ -291,7 +311,7 @@ class MetricsReporter:
             "Avg proxy ttft: %.3f ms, "
         )
         log_msg += "Avg proxy to instance requests time: %.3f ms, "
-        msg = ""
+        msg: str = ""
         for work_addr, result in zip(self._instances.keys(), results):
             if isinstance(result, dict):
                 for _, value in result.items():
@@ -313,17 +333,12 @@ class MetricsReporter:
 
                 metrics[work_addr] = msg
             else:
-                logger.warning(
-                    "Get metrics for %s %s failed, reason is (%s).",
-                    self.server_type,
-                    work_addr,
-                    "timeout"
-                    if isinstance(result, asyncio.TimeoutError)
-                    else result,
+                error_msg = (
+                    f"Get metrics for {self.server_type} {work_addr} failed, reason is "
+                    f"({ 'timeout' if isinstance(result, asyncio.TimeoutError) else result }).\n"
                 )
-        logger.info("Metrics for %s instances:" % self.server_type)
-        for metric in metrics.values():
-            logger.info(metric)
+                metrics[work_addr] = error_msg
+        return metrics
 
     def has_d_instance(self) -> bool:
         return (

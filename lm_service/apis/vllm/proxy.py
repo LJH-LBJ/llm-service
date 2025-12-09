@@ -96,6 +96,7 @@ class Proxy(EngineClient):
         health_threshold: int = 3,
         transfer_protocol: Optional[str] = None,
         metastore_client_config: Optional[dict] = None,
+        log_stats: bool = True,
     ):
         self.vllm_config = vllm_config
         self._check_type("enable_health_monitor", enable_health_monitor, bool)
@@ -116,6 +117,7 @@ class Proxy(EngineClient):
         self.to_p_sockets: dict[str, zmq.asyncio.Socket] = {}
         self.to_d_sockets: dict[str, zmq.asyncio.Socket] = {}
 
+        self.log_stats = log_stats
         self.enable_health_monitor = enable_health_monitor
         self.health_check_interval = health_check_interval
         self.health_threshold = health_threshold
@@ -193,7 +195,7 @@ class Proxy(EngineClient):
 
         # Using the is_pd_merged as the only key to determine which instance cluster to initialize
         init_params = locals()
-        active_types = (
+        self.active_types = (
             {ServerType.E_INSTANCE, ServerType.PD_INSTANCE}
             if self.is_pd_merged
             else {
@@ -202,7 +204,7 @@ class Proxy(EngineClient):
                 ServerType.D_INSTANCE,
             }
         )
-        for server_type in active_types:
+        for server_type in self.active_types:
             if not use_metastore:
                 addr_param_name = SERVER_PARAMS_MAP[server_type][
                     "addr_list_name"
@@ -295,15 +297,21 @@ class Proxy(EngineClient):
         if self.metastore_client is not None:
             self.metastore_client.close()
 
-    async def log_metrics(self) -> None:
+    async def log_metrics(self, log_output: bool=True) -> None:
         # lazy initialization
         if self.output_handler is None:
             self.output_handler = asyncio.create_task(
                 self._run_output_handler()
             )
+        results = {}
         for server_type in self.instance_clusters:
             cluster = self.instance_clusters[server_type]
-            await cluster.get_metrics()
+            # result: [addr, metrics_msg or error_msg]
+            result = await cluster.get_metrics(log_output=log_output)
+            if not log_output:
+                results[server_type.name] = result
+        # results: [server_type [addr, metrics_msg or error_msg]]
+        return results
 
     def connect_to_socket(
         self, addr_list: list[str]
