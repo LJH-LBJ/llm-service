@@ -165,7 +165,9 @@ class InstanceCluster:
                 f"without worker response."
             )
 
-    async def get_metrics(self, log_output: bool = True) -> dict[str, str] | None:
+    async def get_metrics(
+        self, log_output: bool = True
+    ) -> dict[str, str] | None:
         return await self.metrics_logger.get_metrics(log_output=log_output)
 
     def _get_health_endpoints(self):

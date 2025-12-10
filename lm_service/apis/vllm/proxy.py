@@ -297,7 +297,9 @@ class Proxy(EngineClient):
         if self.metastore_client is not None:
             self.metastore_client.close()
 
-    async def log_metrics(self, log_output: bool = True) -> dict[str, dict[str, str] | None]:
+    async def log_metrics(
+        self, log_output: bool = True
+    ) -> dict[str, dict[str, str] | None]:
         # lazy initialization
         if self.output_handler is None:
             self.output_handler = asyncio.create_task(
