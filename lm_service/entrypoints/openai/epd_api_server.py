@@ -203,7 +203,7 @@ def metrics_to_readable_format(metrics: dict) -> str:
             for sub_msg in sub_msgs:
                 sub_msg = sub_msg.rstrip(",")
                 if sub_msg:
-                    lines.append(f"    {sub_msg}\n", end='')
+                    lines.append(f"    {sub_msg}\n", end="")
     return lines
 
 
