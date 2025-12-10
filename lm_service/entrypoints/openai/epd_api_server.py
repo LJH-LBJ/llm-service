@@ -197,13 +197,12 @@ def metrics_to_readable_format(metrics: dict) -> str:
     lines = []
     for server_type, addr_metrics in metrics.items():
         lines.append(f"Server Type: {server_type}")
-        for addr, metric in addr_metrics.items():
+        for addr, metric_msg in addr_metrics.items():
             lines.append(f"  Address: {addr}")
-            if isinstance(metric, str):
-                lines.append(f"    Error: {metric}")
-            else:
-                for key, value in metric.items():
-                    lines.append(f"    {key}: {value}")
+            sub_msgs = metric_msg.strip().split(", ")
+            for sub_msg in sub_msgs:
+                if sub_msg:
+                    lines.append(f"    {sub_msg}")
     return "\n".join(lines)
 
 
