@@ -167,7 +167,7 @@ class InstanceCluster:
 
     async def get_metrics(self) -> dict[str, str]:
         return await self.metrics_logger.get_metrics()
-    
+
     async def log_metrics(self) -> None:
         await self.metrics_logger.log_metrics()
 

@@ -272,7 +272,7 @@ class MetricsReporter:
         # metrics: [addr, metrics_msg or error_msg]
         metrics = await self.build_metrics_msg()
         return metrics
-        
+
     async def log_metrics(self) -> None:
         # metrics: [addr, metrics_msg or error_msg]
         metrics = await self.build_metrics_msg()
@@ -281,7 +281,6 @@ class MetricsReporter:
             if "failed" in msg:
                 logger.error(msg)
             logger.info(msg)
-            
 
     async def build_metrics_msg(self) -> dict[str, str]:
         # work_addr -> msg

@@ -312,7 +312,7 @@ class Proxy(EngineClient):
         # results: [server_type [addr, metrics_msg or error_msg]]
         return results
 
-    #TODO: 优化log metrics逻辑，作为内置能力，每隔一定时间打印一次
+    # TODO: 优化log metrics逻辑，作为内置能力，每隔一定时间打印一次
     async def log_metrics(self) -> None:
         # lazy initialization
         if self.output_handler is None:
@@ -728,9 +728,7 @@ class Proxy(EngineClient):
             self.queues.pop(request_id, None)
 
     async def fetch_metrics_from_instance(
-            self,
-            server_type: ServerType,
-            addr: str
+        self, server_type: ServerType, addr: str
     ) -> dict[str, dict[str, str]]:
         request_id = str(uuid.uuid4())
         request = MetricsRequest(
