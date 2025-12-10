@@ -17,11 +17,13 @@
 ---
 
 ## 启动命令
+
 多个proxy需要启动多个http server
 
 ### 非Redis启动命令
 
 ```bash
+
 VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
     --model /workspace/models/Qwen2.5-VL-7B-Instruct \
     --proxy-addr /tmp/proxy \
@@ -30,11 +32,13 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
     --encode-addr-list  /tmp/encoder_0 \
     --pd-addr-list /tmp/prefill_decode_0 \
     --allowed-local-media-path /workspace/l00807937/EPD_Timecount_v0.11.0/image/
+
 ```
 
 ### Redis启动命令
 
 ```bash
+
 VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
     --model /workspace/models/Qwen2.5-VL-7B-Instruct \
     --port 5580 \
@@ -44,6 +48,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
         "metastore_address": "redis://127.0.0.1:6379/0"
         }' \
     --allowed-local-media-path /workspace/l00807937/EPD_Timecount_v0.11.0/image/
+
 ```
 
 ---
@@ -67,7 +72,9 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
 - **方法**：POST
 - **描述**：基于对话历史生成LLM回复
 - **请求体举例**：
+
     ```bash
+
     curl -X POST  http://127.0.0.1:5580/v1/chat/completions \
         -H "Content-Type: application/json" \
         -d '{
@@ -80,9 +87,12 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
         ]}
         ]
         }'
+
     ```
 - **响应体举例**：
+
     ```json
+
     {
       "id": "xxx",
       "object": "chat.completion",
@@ -99,6 +109,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
       ],
       "usage": { "prompt_tokens": 10, "completion_tokens": 12, "total_tokens": 22 }
     }
+
     ```
 
 ---
@@ -109,15 +120,21 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
 - **方法**：POST
 - **描述**：普通文本补全（非对话）。
 - **请求体举例**：
+
     ```json
+
     {
       "model": "your-model-id",
       "prompt": "Once upon a time",
       "max_tokens": 16
     }
+
     ```
+
 - **响应体举例**：
+
     ```json
+
     {
       "id": "xxx",
       "object": "text_completion",
@@ -131,6 +148,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
       ],
       "usage": { "prompt_tokens": 4, "completion_tokens": 6, "total_tokens": 10 }
     }
+
     ```
 
 ---
@@ -141,8 +159,11 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
 - **方法**：GET
 - **描述**：服务健康状态自检。
 - **成功响应**：
+
     ```json
+
     {"status": "ok"}
+
     ```
 
 ---
@@ -154,13 +175,16 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
 - **描述**：返回模型或服务实例各项运行指标。
 
     **响应示例：**
-    ```
+
+    ```text
+
     Server Type: PD_INSTANCE
       Address: ipc:///tmp/prefill_decode_0
         ec_role: PD_INSTANCE
         addr: ipc:///tmp/prefill_decode_0
         Avg e2e time requests: 4198.529 ms
         ...
+
     ```
 
 ---
@@ -168,17 +192,27 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
 ## 未实现接口
 
 - **路径**：`/abort`
+
 - **方法**：POST
+
 - **状态**：*未实现*
+
 - **描述**：接口定义但尚未提供具体实现，调用将返回默认或为空。
 
 - **路径**：`/start_profile`
+
 - **方法**：POST
+
 - **状态**：*未实现*
+
 - **描述**：接口定义但尚未提供具体实现，调用将返回默认或为空。
 
 - **路径**：`/stop_profile`
+
 - **方法**：POST
+
 - **状态**：*未实现*
+
 - **描述**：接口定义但尚未提供具体实现，调用将返回默认或为空。
+
 ---
