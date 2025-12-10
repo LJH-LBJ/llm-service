@@ -273,6 +273,9 @@ class MetricsReporter:
         metrics = await self.build_metrics_msg()
         if log_output:
             logger.info("Metrics for %s instances:" % self.server_type)
+            if metrics is None:
+                logger.error("No metrics available.")
+                return None
             for msg in metrics.values():
                 # error msg
                 if isinstance(msg, str):
@@ -286,9 +289,9 @@ class MetricsReporter:
 
     async def build_metrics_msg(
         self,
-        results: Optional[dict[int, dict[str, Union[int, float]]]],
-    ) -> dict[str, dict[str, float] | str]:
-        metrics = {}
+    ) -> dict[str, dict[str, float] | str] | None:
+        # work_addr -> msg
+        metrics: dict[str, dict[str, float] | str] = {}
         tasks = [
             asyncio.create_task(
                 asyncio.wait_for(
@@ -299,6 +302,8 @@ class MetricsReporter:
             for work_addr in self._instances.keys()
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
+        if results is None:
+            return None
         log_msg = (
             "ec_role: %s, "
             "addr: %s, "
