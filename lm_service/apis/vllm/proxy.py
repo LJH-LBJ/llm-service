@@ -265,7 +265,6 @@ class Proxy(EngineClient):
         metrics_logger = MetricsReporter(
             server_type=engine_type,
             instances=socket_dict,
-            get_metrics_func=self.get_metrics,
             get_metrics_func=self.fetch_metrics_from_instance,
         )
         request_stats_monitor = RequestStatsMonitor(socket_dict)
