@@ -313,6 +313,7 @@ def build_app(args: Namespace) -> FastAPI:
     app.include_router(router)
     return app
 
+
 def metrics_to_readable_format(metrics: dict) -> str:
     """Convert metrics dict to a readable string format."""
     lines = []
@@ -326,6 +327,7 @@ def metrics_to_readable_format(metrics: dict) -> str:
                 if sub_msg:
                     lines.append(f"    {sub_msg}")
     return "\n".join(lines) + "\n"
+
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser()
