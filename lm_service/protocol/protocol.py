@@ -21,34 +21,6 @@ class ServerType(Enum):
     D_INSTANCE = auto()
     PROXY = auto()
 
-    @classmethod
-    def from_value(cls, value: str) -> "ServerType":
-        """Parse `value` as a ServerType name or numeric value.
-
-        Examples:
-        - "E_INSTANCE" (name, case-insensitive)
-        - "e_instance" or "e-instance" (hyphen allowed)
-        - "1" (numeric value)
-        """
-        text = str(value).strip()
-        if not text:
-            raise ValueError("Empty ServerType value")
-
-        # try name lookup (case-insensitive), allow hyphens
-        try:
-            return cls[text.replace("-", "_").upper()]
-        except KeyError:
-            pass
-
-        # try numeric string
-        try:
-            return cls(int(text))
-        except (ValueError, TypeError):
-            valid = ", ".join(m.name for m in cls)
-            raise ValueError(
-                f"Invalid ServerType value: {value!r}. Valid names: {valid}"
-            )
-
 
 class RequestType:
     GENERATION = b"\x00"
