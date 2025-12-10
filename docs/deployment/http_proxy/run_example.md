@@ -19,7 +19,7 @@
 ## 启动命令
 多个proxy需要启动多个http server
 
-### 非Radis启动命令
+### 非Redis启动命令
 
 ```bash
 VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
@@ -32,7 +32,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
     --allowed-local-media-path /workspace/l00807937/EPD_Timecount_v0.11.0/image/
 ```
 
-### Radis启动命令
+### Redis启动命令
 
 ```bash
 VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
@@ -139,7 +139,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
 
 - **路径**：`/check_health`
 - **方法**：GET
-- **描述**：服务健康状态自检，适用于探活和监控。
+- **描述**：服务健康状态自检。
 - **成功响应**：
     ```json
     {"status": "ok"}
@@ -151,7 +151,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
 
 - **路径**：`/metrics`
 - **方法**：GET
-- **描述**：返回模型或服务实例各项运行指标。内容为美化后的纯文本输出，适合人类阅读。  
+- **描述**：返回模型或服务实例各项运行指标。
 
     **响应示例：**
     ```
