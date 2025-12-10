@@ -18,7 +18,6 @@ from fastapi import (
     FastAPI,
     HTTPException,
     Request,
-    Response,
 )
 from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
 from lm_service.entrypoints.cli_args import make_arg_parser
@@ -185,12 +184,13 @@ async def metrics(raw_request: Request):
         total_metrics = await proxy_client.log_metrics(log_output=False)
         return PlainTextResponse(
             status_code=HTTPStatus.OK.value,
-            content=metrics_to_readable_format(total_metrics)
+            content=metrics_to_readable_format(total_metrics),
         )
     except Exception as e:
         raise HTTPException(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
         ) from e
+
 
 def metrics_to_readable_format(metrics: dict) -> str:
     """Convert metrics dict to a readable string format."""
@@ -205,6 +205,7 @@ def metrics_to_readable_format(metrics: dict) -> str:
                 for key, value in metric.items():
                     lines.append(f"    {key}: {value}")
     return "\n".join(lines)
+
 
 @router.get("/abort")
 @with_cancellation
