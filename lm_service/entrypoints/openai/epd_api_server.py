@@ -192,22 +192,7 @@ async def metrics(raw_request: Request):
         ) from e
 
 
-def metrics_to_readable_format(metrics: dict) -> str:
-    """Convert metrics dict to a readable string format."""
-    lines = []
-    for server_type, addr_metrics in metrics.items():
-        lines.append(f"Server Type: {server_type}")
-        for addr, metric_msg in addr_metrics.items():
-            lines.append(f"  Address: {addr}")
-            sub_msgs = metric_msg.strip().split(", ")
-            for sub_msg in sub_msgs:
-                sub_msg = sub_msg.rstrip(",")
-                if sub_msg:
-                    lines.append(f"    {sub_msg}")
-    return "\n".join(lines) + "\n"
-
-
-@router.get("/abort")
+@router.post("/abort")
 @with_cancellation
 async def abort(raw_request: Request):
     pass
@@ -215,7 +200,7 @@ async def abort(raw_request: Request):
 
 if envs.VLLM_TORCH_PROFILER_DIR:
 
-    @router.get("/start_profile")
+    @router.post("/start_profile")
     async def start_profile(raw_request: Request):
         pass
 
@@ -328,6 +313,19 @@ def build_app(args: Namespace) -> FastAPI:
     app.include_router(router)
     return app
 
+def metrics_to_readable_format(metrics: dict) -> str:
+    """Convert metrics dict to a readable string format."""
+    lines = []
+    for server_type, addr_metrics in metrics.items():
+        lines.append(f"Server Type: {server_type}")
+        for addr, metric_msg in addr_metrics.items():
+            lines.append(f"  Address: {addr}")
+            sub_msgs = metric_msg.strip().split(", ")
+            for sub_msg in sub_msgs:
+                sub_msg = sub_msg.rstrip(",")
+                if sub_msg:
+                    lines.append(f"    {sub_msg}")
+    return "\n".join(lines) + "\n"
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser()
