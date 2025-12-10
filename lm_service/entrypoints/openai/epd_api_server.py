@@ -20,7 +20,7 @@ from fastapi import (
     Request,
     Response,
 )
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
 from lm_service.entrypoints.cli_args import make_arg_parser
 from lm_service.apis.vllm.proxy import Proxy
 from lm_service.logger_utils import init_logger
@@ -46,7 +46,7 @@ from vllm.engine.protocol import EngineClient
 from vllm.engine.arg_utils import AsyncEngineArgs
 from vllm.utils import FlexibleArgumentParser, decorate_logs
 from vllm.usage.usage_lib import UsageContext
-from vllm.utils.network_utils import find_process_using_port
+from vllm.utils import find_process_using_port
 
 
 logger = init_logger(__name__)
@@ -160,7 +160,7 @@ async def check_health(raw_request: Request):
                     check_health(server_type, addr),
                     timeout=health_check_interval,
                 )
-                results[str(server_type.name) + addr] = (
+                results[str(server_type.name) + "-" + addr] = (
                     "Healthy" if result else "Unhealthy"
                 )
             except asyncio.TimeoutError:
@@ -183,12 +183,28 @@ async def metrics(raw_request: Request):
     try:
         # total_metrics: [server_type [addr, metrics_msg or error_msg]]
         total_metrics = await proxy_client.log_metrics(log_output=False)
-        return Response(status_code=HTTPStatus.OK.value, detail=total_metrics)
+        return PlainTextResponse(
+            status_code=HTTPStatus.OK.value,
+            content=metrics_to_readable_format(total_metrics)
+        )
     except Exception as e:
         raise HTTPException(
             status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
         ) from e
 
+def metrics_to_readable_format(metrics: dict) -> str:
+    """Convert metrics dict to a readable string format."""
+    lines = []
+    for server_type, addr_metrics in metrics.items():
+        lines.append(f"Server Type: {server_type}")
+        for addr, metric in addr_metrics.items():
+            lines.append(f"  Address: {addr}")
+            if isinstance(metric, str):
+                lines.append(f"    Error: {metric}")
+            else:
+                for key, value in metric.items():
+                    lines.append(f"    {key}: {value}")
+    return "\n".join(lines)
 
 @router.get("/abort")
 @with_cancellation
