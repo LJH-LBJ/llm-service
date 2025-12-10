@@ -203,8 +203,8 @@ def metrics_to_readable_format(metrics: dict) -> str:
             for sub_msg in sub_msgs:
                 sub_msg = sub_msg.rstrip(",")
                 if sub_msg:
-                    lines.append(f"    {sub_msg}\n")
-    return "".join(lines)
+                    lines.append(f"    {sub_msg}")
+    return "\n".join(lines) + "\n"
 
 
 @router.get("/abort")
