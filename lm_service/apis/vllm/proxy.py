@@ -266,6 +266,7 @@ class Proxy(EngineClient):
             server_type=engine_type,
             instances=socket_dict,
             get_metrics_func=self.get_metrics,
+            get_metrics_func=self.fetch_metrics_from_instance,
         )
         request_stats_monitor = RequestStatsMonitor(socket_dict)
         route_policy = f"LM_SERVICE_{engine_type.name}_ROUTER"
@@ -297,9 +298,7 @@ class Proxy(EngineClient):
         if self.metastore_client is not None:
             self.metastore_client.close()
 
-    async def log_metrics(
-        self, log_output: bool = True
-    ) -> dict[str, dict[str, str] | None]:
+    async def get_metrics(self) -> dict[str, dict[str, str]]:
         # lazy initialization
         if self.output_handler is None:
             self.output_handler = asyncio.create_task(
@@ -309,11 +308,21 @@ class Proxy(EngineClient):
         for server_type in self.instance_clusters:
             cluster = self.instance_clusters[server_type]
             # result: [addr, metrics_msg or error_msg]
-            result = await cluster.get_metrics(log_output=log_output)
-            if not log_output:
-                results[server_type.name] = result
+            result = await cluster.get_metrics()
+            results[server_type.name] = result
         # results: [server_type [addr, metrics_msg or error_msg]]
         return results
+
+    #TODO: 优化log metrics逻辑，作为内置能力，每隔一定时间打印一次
+    async def log_metrics(self) -> None:
+        # lazy initialization
+        if self.output_handler is None:
+            self.output_handler = asyncio.create_task(
+                self._run_output_handler()
+            )
+        for server_type in self.instance_clusters:
+            cluster = self.instance_clusters[server_type]
+            await cluster.log_metrics()
 
     def connect_to_socket(
         self, addr_list: list[str]
@@ -719,7 +728,11 @@ class Proxy(EngineClient):
         finally:
             self.queues.pop(request_id, None)
 
-    async def get_metrics(self, server_type: ServerType, addr: str):
+    async def fetch_metrics_from_instance(
+            self,
+            server_type: ServerType,
+            addr: str
+    ) -> dict[str, dict[str, str]]:
         request_id = str(uuid.uuid4())
         request = MetricsRequest(
             request_id=request_id, proxy_addr=self.proxy_addr
@@ -736,10 +749,9 @@ class Proxy(EngineClient):
             await socket.send_multipart(msg, copy=False)
             response = await q.get()
             # calculate proxy to pd/encode time
-            if (
-                isinstance(response, MetricsResponse)
-                and response.metrics is not None
-            ):
+            if isinstance(response, Exception):
+                raise response
+            else:
                 # calculate proxy to pd/encode time average
                 # add to metrics
                 proxy_ttft_avg: float = 0.0
@@ -760,10 +772,6 @@ class Proxy(EngineClient):
                     )
 
                 return response.metrics
-            elif isinstance(response, Exception):
-                raise response
-            else:
-                return None
 
         except Exception as e:
             raise RuntimeError(

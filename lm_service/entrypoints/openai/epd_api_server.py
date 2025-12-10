@@ -181,7 +181,7 @@ async def metrics(raw_request: Request):
     proxy_client: EngineClient = engine_client(raw_request)
     try:
         # total_metrics: [server_type [addr, metrics_msg or error_msg]]
-        total_metrics = await proxy_client.log_metrics(log_output=False)
+        total_metrics = await proxy_client.get_metrics()
         return PlainTextResponse(
             status_code=HTTPStatus.OK.value,
             content=metrics_to_readable_format(total_metrics),

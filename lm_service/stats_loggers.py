@@ -268,30 +268,22 @@ class MetricsReporter:
         self.proxy_ttft_total += time.perf_counter() - start
         return True
 
-    async def get_metrics(
-        self, log_output: bool = True
-    ) -> dict[str, str] | None:
+    async def get_metrics(self) -> dict[str, str]:
         # metrics: [addr, metrics_msg or error_msg]
         metrics = await self.build_metrics_msg()
-        if log_output:
-            logger.info("Metrics for %s instances:" % self.server_type)
-            if metrics is None:
-                logger.error("No metrics available.")
-                return None
-            for msg in metrics.values():
-                # error msg
-                if isinstance(msg, str):
-                    logger.error(msg)
-                # metrics msg
-                else:
-                    logger.info(msg)
-            return None
-        else:
-            return metrics
+        return metrics
+        
+    async def log_metrics(self) -> None:
+        # metrics: [addr, metrics_msg or error_msg]
+        metrics = await self.build_metrics_msg()
+        logger.info("Metrics for %s instances:" % self.server_type)
+        for msg in metrics.values():
+            if "failed" in msg:
+                logger.error(msg)
+            logger.info(msg)
+            
 
-    async def build_metrics_msg(
-        self,
-    ) -> dict[str, str] | None:
+    async def build_metrics_msg(self) -> dict[str, str]:
         # work_addr -> msg
         metrics: dict[str, str] = {}
         tasks = [
@@ -304,8 +296,7 @@ class MetricsReporter:
             for work_addr in self._instances.keys()
         ]
         results = await asyncio.gather(*tasks, return_exceptions=True)
-        if results is None:
-            return None
+
         log_msg = (
             "ec_role: %s, "
             "addr: %s, "
