@@ -293,7 +293,7 @@ class MetricsReporter:
         self,
     ) -> dict[str, str] | None:
         # work_addr -> msg
-        metrics: dict[str, dict[str, float] | str] = {}
+        metrics: dict[str, str] = {}
         tasks = [
             asyncio.create_task(
                 asyncio.wait_for(
