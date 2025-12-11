@@ -69,10 +69,10 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
         self._health_check_func = health_check_func
         self._health_monitor_handler = None
         self._lock = lock
-    
+
     def get_health_check_func(self):
         return self._health_check_func
-    
+
     def get_health_check_interval(self):
         return self._health_check_interval
 

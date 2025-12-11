@@ -312,7 +312,7 @@ class Proxy(EngineClient):
         # results: [server_type [addr, metrics_msg or error_msg]]
         return results
 
-    # TODO: Optimize log metrics logic; make it a built-in capability 
+    # TODO: Optimize log metrics logic; make it a built-in capability
     # and print at regular intervals.
     async def log_metrics(self) -> None:
         # lazy initialization

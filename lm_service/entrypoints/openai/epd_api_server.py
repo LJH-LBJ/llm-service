@@ -164,8 +164,7 @@ async def check_health(raw_request: Request):
             except asyncio.TimeoutError:
                 raise HTTPException(
                     status_code=HTTPStatus.GATEWAY_TIMEOUT.value,
-                    detail=f"Health check timed out for "
-                    "server_type={server_type.name}, addr={addr}",
+                    detail=f"Health check timed out for server_type={server_type.name}, addr={addr}",
                 )
             except Exception as e:
                 raise HTTPException(
