@@ -152,7 +152,9 @@ async def check_health(raw_request: Request):
                 proxy_client.instance_clusters[server_type].service_discovery
             )
             check_health = service_discovery.get_health_check_func()
-            health_check_interval = service_discovery.get_health_check_interval()
+            health_check_interval = (
+                service_discovery.get_health_check_interval()
+            )
             try:
                 result: bool = await asyncio.wait_for(
                     check_health(server_type, addr),
@@ -206,14 +208,14 @@ if envs.VLLM_TORCH_PROFILER_DIR:
     async def start_profile(raw_request: Request):
         raise HTTPException(
             status_code=HTTPStatus.NOT_IMPLEMENTED.value,
-            detail="The /start_profile endpoint is not implemented."
+            detail="The /start_profile endpoint is not implemented.",
         )
 
     @router.post("/stop_profile")
     async def stop_profile(raw_request: Request):
         raise HTTPException(
             status_code=HTTPStatus.NOT_IMPLEMENTED.value,
-            detail="The /stop_profile endpoint is not implemented."
+            detail="The /stop_profile endpoint is not implemented.",
         )
 
 
