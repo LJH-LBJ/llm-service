@@ -24,7 +24,7 @@
 
 ```bash
 
-VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
+VLLM_USE_V1=1 python -m lm_service.entrypoints.openai.epd_api_server \
     --model /workspace/models/Qwen2.5-VL-7B-Instruct \
     --proxy-addr /tmp/proxy \
     --port 5580 \
@@ -39,7 +39,7 @@ VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
 
 ```bash
 
-VLLM_USE_V1=1 python -m lm_service.apis.vllm.epd_api_server \
+VLLM_USE_V1=1 python -m lm_service.entrypoints.openai.epd_api_server \
     --model /workspace/models/Qwen2.5-VL-7B-Instruct \
     --port 5580 \
     --host 0.0.0.0 \
