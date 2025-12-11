@@ -111,9 +111,7 @@ async def create_chat_completion(
     },
 )
 @with_cancellation
-async def create_completion(
-    request: CompletionRequest, raw_request: Request
-):
+async def create_completion(request: CompletionRequest, raw_request: Request):
     handler = completion(raw_request)
     if handler is None:
         return base(raw_request).create_error_response(
