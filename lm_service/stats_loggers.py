@@ -305,8 +305,8 @@ class MetricsReporter:
             "Avg mean time per output token requests: %.3f ms, "
             "Avg time to first token: %.3f ms, "
             "Avg proxy ttft: %.3f ms, "
+            "Avg proxy to instance requests time: %.3f ms "
         )
-        log_msg += "Avg proxy to instance requests time: %.3f ms, "
         msg: str = ""
         for work_addr, result in zip(self._instances.keys(), results):
             if isinstance(result, dict):
@@ -331,7 +331,7 @@ class MetricsReporter:
             else:
                 error_msg = (
                     f"Get metrics for {self.server_type} {work_addr} failed, reason is "
-                    f"({'timeout' if isinstance(result, asyncio.TimeoutError) else result}).\n"
+                    f"({'timeout' if isinstance(result, asyncio.TimeoutError) else result})."
                 )
                 metrics[work_addr] = error_msg
         return metrics

@@ -177,10 +177,10 @@ fi
 start_all
 
 VLLM_USE_V1=1 python -m lm_service.entrypoints.openai.epd_api_server \
-    --model /workspace/models/Qwen2.5-VL-7B-Instruct \
-    --proxy-addr /tmp/proxy \
+    --model $MODEL \
+    --proxy-addr $PROXY_ADDR \
     --port 5580 \
     --host 0.0.0.0 \
-    --encode-addr-list  /tmp/encoder_0 \
-    --pd-addr-list /tmp/prefill_decode_0 \
-    --allowed-local-media-path /workspace/l00807937/EPD_Timecount_v0.11.0/image/
+    --encode-addr-list  $(for ((i=0; i<ENCODER_NUMBER; i++)); do echo -n "${ENCODER_ADDR_PREFIX}_$i "; done) \
+    --pd-addr-list $(for ((i=0; i<PD_NUMBER; i++)); do echo -n "${PD_ADDR_PREFIX}_$i "; done) \
+    --allowed-local-media-path $IMAGE_FILE_PATH

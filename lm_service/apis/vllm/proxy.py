@@ -312,7 +312,8 @@ class Proxy(EngineClient):
         # results: [server_type [addr, metrics_msg or error_msg]]
         return results
 
-    # TODO: 优化log metrics逻辑，作为内置能力，每隔一定时间打印一次
+    # TODO: Optimize log metrics logic; make it a built-in capability 
+    # and print at regular intervals.
     async def log_metrics(self) -> None:
         # lazy initialization
         if self.output_handler is None:
@@ -680,7 +681,10 @@ class Proxy(EngineClient):
 
     async def get_tokenizer(self) -> AnyTokenizer:
         if self.tokenizer is None:
-            raise ValueError("Unable to get tokenizer")
+            raise ValueError(
+                "Tokenizer not initialized. Ensure vllm_config "
+                "is provided when creating the Proxy instance."
+            )
 
         return self.tokenizer
 

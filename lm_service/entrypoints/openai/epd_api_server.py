@@ -151,8 +151,8 @@ async def check_health(raw_request: Request):
             service_discovery: HealthCheckServiceDiscovery = (
                 proxy_client.instance_clusters[server_type].service_discovery
             )
-            check_health = service_discovery._health_check_func
-            health_check_interval = service_discovery._health_check_interval
+            check_health = service_discovery.get_health_check_func()
+            health_check_interval = service_discovery.get_health_check_interval()
             try:
                 result: bool = await asyncio.wait_for(
                     check_health(server_type, addr),
@@ -164,7 +164,8 @@ async def check_health(raw_request: Request):
             except asyncio.TimeoutError:
                 raise HTTPException(
                     status_code=HTTPStatus.GATEWAY_TIMEOUT.value,
-                    detail="Health check timed out",
+                    detail=f"Health check timed out for "
+                    "server_type={server_type.name}, addr={addr}",
                 )
             except Exception as e:
                 raise HTTPException(
@@ -194,18 +195,27 @@ async def metrics(raw_request: Request):
 @router.post("/abort")
 @with_cancellation
 async def abort(raw_request: Request):
-    pass
+    raise HTTPException(
+        status_code=HTTPStatus.NOT_IMPLEMENTED.value,
+        detail="The /abort endpoint is not implemented.",
+    )
 
 
 if envs.VLLM_TORCH_PROFILER_DIR:
 
     @router.post("/start_profile")
     async def start_profile(raw_request: Request):
-        pass
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_IMPLEMENTED.value,
+            detail="The /start_profile endpoint is not implemented."
+        )
 
     @router.post("/stop_profile")
     async def stop_profile(raw_request: Request):
-        pass
+        raise HTTPException(
+            status_code=HTTPStatus.NOT_IMPLEMENTED.value,
+            detail="The /stop_profile endpoint is not implemented."
+        )
 
 
 async def run_server(args, **uvicorn_kwargs) -> None:
@@ -322,7 +332,6 @@ def metrics_to_readable_format(metrics: dict) -> str:
             lines.append(f"  Address: {addr}")
             sub_msgs = metric_msg.strip().split(", ")
             for sub_msg in sub_msgs:
-                sub_msg = sub_msg.rstrip(",")
                 if sub_msg:
                     lines.append(f"    {sub_msg}")
     return "\n".join(lines) + "\n"

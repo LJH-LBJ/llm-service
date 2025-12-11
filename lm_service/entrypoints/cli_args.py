@@ -35,7 +35,7 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         "--pd-addr-list",
         required=False,
         nargs="+",
-        help="List of addresses for the pd.",
+        help="List of addresses for the prefill-decode.",
     )
     parser.add_argument(
         "--p-addr-list",
@@ -61,9 +61,6 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         type=json.loads,
         default=None,
         help="Enable metastore client config.",
-    )
-    parser.add_argument(
-        "--image-path", required=False, help="Path to the image"
     )
 
     parser.add_argument(
