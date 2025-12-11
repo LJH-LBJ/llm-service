@@ -27,6 +27,7 @@ from lm_service.service_discovery import HealthCheckServiceDiscovery
 from vllm.entrypoints.openai.api_server import (
     validate_json_request,
     ChatCompletionRequest,
+    CompletionRequest,
     setup_server,
     init_app_state,
     chat,
@@ -111,15 +112,15 @@ async def create_chat_completion(
 )
 @with_cancellation
 async def create_completion(
-    request: ChatCompletionRequest, raw_request: Request
+    request: CompletionRequest, raw_request: Request
 ):
     handler = completion(raw_request)
     if handler is None:
         return base(raw_request).create_error_response(
-            message="The model does not support Chat Completions API"
+            message="The model does not support Completions API"
         )
     try:
-        generator = await handler.create_chat_completion(request, raw_request)
+        generator = await handler.create_completion(request, raw_request)
     except OverflowError as e:
         raise HTTPException(
             status_code=HTTPStatus.BAD_REQUEST.value, detail=str(e)
