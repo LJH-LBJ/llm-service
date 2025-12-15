@@ -419,7 +419,10 @@ class Proxy(EngineClient):
 
         # Support both raw string prompts and dict prompts with multimodal data
         if "prompt_token_ids" in prompt and self.tokenizer:
-            prompt_text = self.tokenizer.decode(prompt["prompt_token_ids"])
+            prompt_text = (
+                prompt["prompt"] if "prompt" in prompt \
+                    else prompt["prompt_token_ids"]
+            )
         else:
             prompt_text = (
                 prompt["prompt"] if isinstance(prompt, dict) else prompt
@@ -923,12 +926,11 @@ def _encode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
             }
         elif isinstance(img, Image.Image):
             # Convert PIL Image to numpy array
-            arr = np.array(img)
             encoded_img = {
-                "type": "ndarray",
-                "data": arr.tobytes(),
-                "shape": arr.shape,
-                "dtype": str(arr.dtype),
+                "type": "pil",
+                "data": img.tobytes(),
+                "size": img.size,
+                "mode": img.mode,
             }
         else:
             raise ValueError(

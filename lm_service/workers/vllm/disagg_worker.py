@@ -4,6 +4,7 @@
 import asyncio
 import os
 import time
+from PIL import Image
 import uuid
 from typing import Any, Optional, Union
 
@@ -469,7 +470,11 @@ def _decode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
             decoded_img = np.frombuffer(
                 bytes(img["data"]), dtype=img["dtype"]
             ).reshape(img["shape"])
-            decoded_list.append(decoded_img)
+        elif img["type"] == "pil":
+            size = tuple(img["size"])
+            mode = img["mode"]
+            decoded_img = Image.frombytes(mode, size, img["data"])
+        decoded_list.append(decoded_img)
     result_images: list[NDArray[Any]] | NDArray[Any]
     if len(decoded_list) == 1:
         result_images = decoded_list[0]

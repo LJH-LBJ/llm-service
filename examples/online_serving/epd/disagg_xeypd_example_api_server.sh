@@ -176,6 +176,7 @@ fi
 
 start_all
 
+start_api_server() {
 VLLM_USE_V1=1 python -m lm_service.entrypoints.openai.epd_api_server \
     --model $MODEL \
     --proxy-addr $PROXY_ADDR \
@@ -184,3 +185,6 @@ VLLM_USE_V1=1 python -m lm_service.entrypoints.openai.epd_api_server \
     --encode-addr-list  $(for ((i=0; i<ENCODER_NUMBER; i++)); do echo -n "${ENCODER_ADDR_PREFIX}_$i "; done) \
     --pd-addr-list $(for ((i=0; i<PD_NUMBER; i++)); do echo -n "${PD_ADDR_PREFIX}_$i "; done) \
     --allowed-local-media-path $IMAGE_FILE_PATH
+}
+
+start_api_server

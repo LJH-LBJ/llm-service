@@ -76,7 +76,7 @@ class GenerationResponse(msgspec.Struct):
 
 class GenerationRequest(msgspec.Struct):
     request_id: str
-    prompt: str
+    prompt: Union[str, list[int]]
     sampling_params: SamplingParams
     proxy_addr: str
     multi_modal_data: Optional[dict[str, Any]] = None
