@@ -142,38 +142,44 @@ async def create_completion(request: CompletionRequest, raw_request: Request):
 @with_cancellation
 async def check_health(raw_request: Request):
     proxy_client: EngineClient = engine_client(raw_request)
-    results: dict[str, str] = {}
+    response: dict[str, str] = {}
     for server_type in proxy_client.active_types:
         sockets: dict[str, zmq.asyncio.Socket] = (
             proxy_client.get_server_to_socket_map().get(server_type)
         )
-        for addr in sockets:
-            service_discovery: HealthCheckServiceDiscovery = (
-                proxy_client.instance_clusters[server_type].service_discovery
-            )
-            check_health = service_discovery.get_health_check_func()
-            health_check_interval = (
-                service_discovery.get_health_check_interval()
-            )
-            try:
-                result: bool = await asyncio.wait_for(
+        service_discovery: HealthCheckServiceDiscovery = (
+            proxy_client.instance_clusters[server_type].service_discovery
+        )
+        check_health = service_discovery.get_health_check_func()
+        health_check_interval = (
+            service_discovery.get_health_check_interval()
+        )
+        tasks = [
+            asyncio.create_task(
+                asyncio.wait_for(
                     check_health(server_type, addr),
                     timeout=health_check_interval,
                 )
-                results[str(server_type.name) + "-" + addr] = (
+            )
+            for addr in sockets
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        for addr, result in zip(sockets.keys(), results):
+            if isinstance(result, bool):
+                response[str(server_type.name) + "-" + addr] = (
                     "Healthy" if result else "Unhealthy"
                 )
-            except asyncio.TimeoutError:
+            elif isinstance(result, asyncio.TimeoutError):
                 raise HTTPException(
                     status_code=HTTPStatus.GATEWAY_TIMEOUT.value,
                     detail=f"Health check timed out for server_type={server_type.name}, addr={addr}",
                 )
-            except Exception as e:
+            elif isinstance(result, Exception):
                 raise HTTPException(
                     status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
-                    detail=str(e),
-                ) from e
-    return JSONResponse(content={"results": results})
+                    detail=str(result),
+                ) from result
+    return JSONResponse(content={"results": response})
 
 
 @router.get("/metrics")
