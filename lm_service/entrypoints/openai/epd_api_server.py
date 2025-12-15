@@ -145,7 +145,7 @@ async def check_health(raw_request: Request):
     results: dict[str, str] = {}
     for server_type in proxy_client.active_types:
         sockets: dict[str, zmq.asyncio.Socket] = (
-            proxy_client.server_to_socket_map.get(server_type)
+            proxy_client.get_server_to_socket_map().get(server_type)
         )
         for addr in sockets:
             service_discovery: HealthCheckServiceDiscovery = (
@@ -279,7 +279,7 @@ async def run_server_worker(
         vllm_config = proxy_client.vllm_config
         await init_app_state(proxy_client, vllm_config, app.state, args)
         logger.info(
-            "Starting vLLM API server %d on %s",
+            "Starting LM-Service API server %d on %s",
             proxy_client.vllm_config.parallel_config._api_process_rank,
             listen_address,
         )
