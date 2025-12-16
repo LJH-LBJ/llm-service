@@ -97,19 +97,25 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
     def get_unhealth_endpoints(self) -> list[str]:
         return self._cached_unhealth_instances
 
+    async def get_check_health_results(
+        self
+    ) -> tuple[list[bool], dict[str, zmq.asyncio.Socket]]:
+        tasks = [
+            asyncio.create_task(
+                asyncio.wait_for(
+                    self._health_check_func(self.server_type, addr),
+                    timeout=self._health_check_interval,
+                )
+            )
+            for addr in self._instances.keys()
+        ]
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+        return results, self._instances
+
     async def run_health_check_loop(self):
         while True:
             start_time = time.monotonic()
-            tasks = [
-                asyncio.create_task(
-                    asyncio.wait_for(
-                        self._health_check_func(self.server_type, addr),
-                        timeout=self._health_check_interval,
-                    )
-                )
-                for addr in self._instances.keys()
-            ]
-            results = await asyncio.gather(*tasks, return_exceptions=True)
+            results, _ = await self.get_check_health_results()
 
             for addr, result in zip(self._instances.keys(), results):
                 if isinstance(result, bool) and result:

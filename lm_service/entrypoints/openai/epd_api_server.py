@@ -144,26 +144,11 @@ async def check_health(raw_request: Request):
     proxy_client: EngineClient = engine_client(raw_request)
     response: dict[str, str] = {}
     for server_type in proxy_client.active_types:
-        sockets: dict[str, zmq.asyncio.Socket] = (
-            proxy_client.get_server_to_socket_map().get(server_type)
-        )
         service_discovery: HealthCheckServiceDiscovery = (
             proxy_client.instance_clusters[server_type].service_discovery
         )
-        check_health = service_discovery.get_health_check_func()
-        health_check_interval = (
-            service_discovery.get_health_check_interval()
-        )
-        tasks = [
-            asyncio.create_task(
-                asyncio.wait_for(
-                    check_health(server_type, addr),
-                    timeout=health_check_interval,
-                )
-            )
-            for addr in sockets
-        ]
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        results, sockets = await service_discovery.get_check_health_results()
+        
         for addr, result in zip(sockets.keys(), results):
             if isinstance(result, bool):
                 response[str(server_type.name) + "-" + addr] = (

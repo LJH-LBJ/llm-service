@@ -874,9 +874,6 @@ class Proxy(EngineClient):
         raise ValueError(
             f"Address {addr} not found in any {server_type.name} sockets."
         )
-    
-    def get_server_to_socket_map(self) -> dict[ServerType, dict[str, zmq.asyncio.Socket]]:
-        return self.server_to_socket_map
 
     async def _remove_instance_from_registry(
         self, addr: str, server_type: ServerType
