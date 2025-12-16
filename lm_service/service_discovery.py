@@ -100,7 +100,7 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
 
     async def get_check_health_results(
         self,
-    ) -> tuple[list[bool], dict[str, zmq.asyncio.Socket]]:
+    ) -> tuple[list[bool | BaseException], dict[str, zmq.asyncio.Socket]]:
         tasks = [
             asyncio.create_task(
                 asyncio.wait_for(
