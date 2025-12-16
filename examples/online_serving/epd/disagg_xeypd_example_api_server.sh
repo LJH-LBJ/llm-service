@@ -82,7 +82,7 @@ function start_pd() {
 
 function start_api_server() {
     echo "Starting API server..."
-    VLLM_USE_V1=1 python -m lm_service.entrypoints.openai.epd_api_server \
+    python -m lm_service.entrypoints.openai.epd_api_server \
         --model $MODEL \
         --proxy-addr $PROXY_ADDR \
         --port 5580 \
