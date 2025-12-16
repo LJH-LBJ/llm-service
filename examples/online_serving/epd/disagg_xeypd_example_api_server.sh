@@ -80,6 +80,18 @@ function start_pd() {
     echo $! >> "$PID_FILE"
 }
 
+function start_api_server() {
+    echo "Starting API server..."
+    VLLM_USE_V1=1 python -m lm_service.entrypoints.openai.epd_api_server \
+        --model $MODEL \
+        --proxy-addr $PROXY_ADDR \
+        --port 5580 \
+        --host 0.0.0.0 \
+        --encode-addr-list  $(for ((i=0; i<ENCODER_NUMBER; i++)); do echo -n "${ENCODER_ADDR_PREFIX}_$i "; done) \
+        --pd-addr-list      $(for ((i=0; i<PD_NUMBER; i++)); do echo -n "${PD_ADDR_PREFIX}_$i "; done) \
+        --allowed-local-media-path $IMAGE_FILE_PATH
+}
+
 function start_all() {
     mkdir -p "$LOG_PATH"
     if [ -f "$PID_FILE" ]; then
@@ -109,6 +121,8 @@ function start_all() {
     done
 
     echo "All workers starting. PIDs are stored in $PID_FILE."
+
+    start_api_server
 }
 
 function stop_all() {
@@ -175,16 +189,3 @@ if [ -z "$IMAGE_FILE_PATH" ]; then
 fi
 
 start_all
-
-start_api_server() {
-VLLM_USE_V1=1 python -m lm_service.entrypoints.openai.epd_api_server \
-    --model $MODEL \
-    --proxy-addr $PROXY_ADDR \
-    --port 5580 \
-    --host 0.0.0.0 \
-    --encode-addr-list  $(for ((i=0; i<ENCODER_NUMBER; i++)); do echo -n "${ENCODER_ADDR_PREFIX}_$i "; done) \
-    --pd-addr-list $(for ((i=0; i<PD_NUMBER; i++)); do echo -n "${PD_ADDR_PREFIX}_$i "; done) \
-    --allowed-local-media-path $IMAGE_FILE_PATH
-}
-
-start_api_server
