@@ -4,7 +4,6 @@
 import asyncio
 import signal
 import socket
-import zmq
 import uvicorn
 from argparse import Namespace
 from collections.abc import AsyncIterator
@@ -148,7 +147,7 @@ async def check_health(raw_request: Request):
             proxy_client.instance_clusters[server_type].service_discovery
         )
         results, sockets = await service_discovery.get_check_health_results()
-        
+
         for addr, result in zip(sockets.keys(), results):
             if isinstance(result, bool):
                 response[str(server_type.name) + "-" + addr] = (

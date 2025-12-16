@@ -420,8 +420,9 @@ class Proxy(EngineClient):
         # Support both raw string prompts and dict prompts with multimodal data
         if "prompt_token_ids" in prompt and self.tokenizer:
             prompt_text = (
-                prompt["prompt"] if "prompt" in prompt \
-                    else prompt["prompt_token_ids"]
+                prompt["prompt"]
+                if "prompt" in prompt
+                else prompt["prompt_token_ids"]
             )
         else:
             prompt_text = (

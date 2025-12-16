@@ -99,7 +99,7 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
         return self._cached_unhealth_instances
 
     async def get_check_health_results(
-        self
+        self,
     ) -> tuple[list[bool], dict[str, zmq.asyncio.Socket]]:
         tasks = [
             asyncio.create_task(
