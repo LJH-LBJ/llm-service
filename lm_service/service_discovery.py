@@ -9,9 +9,6 @@ from abc import ABC, abstractmethod
 import zmq
 import zmq.asyncio
 
-import zmq
-import zmq.asyncio
-
 from lm_service.protocol.protocol import ServerType
 from lm_service.logger_utils import init_logger
 
@@ -69,6 +66,7 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
         self._health_check_func = health_check_func
         self._health_monitor_handler = None
         self._lock = lock
+        self._timestamp_dict: dict[str, float] = {}
 
     def get_health_check_func(self):
         return self._health_check_func
@@ -80,6 +78,9 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
         return (
             self.enable_health_monitor and self._health_monitor_handler is None
         )
+
+    def update_latest_success(self, addr):
+        self._timestamp_dict[addr] = time.monotonic()
 
     def launch_health_monitor(self):
         self._health_monitor_handler = asyncio.create_task(
@@ -115,9 +116,32 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
     async def run_health_check_loop(self):
         while True:
             start_time = time.monotonic()
-            results, _ = await self.get_check_health_results()
+            tasks = []
+            addrs_to_check = []
 
-            for addr, result in zip(self._instances.keys(), results):
+            for addr in self._instances.keys():
+                last_ts = self._timestamp_dict.get(addr, 0)
+                if start_time - last_ts >= self._health_check_interval:
+                    addrs_to_check.append(addr)
+                    tasks.append(
+                        asyncio.create_task(
+                            asyncio.wait_for(
+                                self._health_check_func(self.server_type, addr),
+                                timeout=self._health_check_interval,
+                            )
+                        )
+                    )
+                else:
+                    self._update_health_counts(addr, True)
+
+            # If nothing to run, just sleep
+            if not tasks:
+                await asyncio.sleep(self._health_check_interval)
+                continue
+
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+
+            for addr, result in zip(addrs_to_check, results):
                 if isinstance(result, bool) and result:
                     self._update_health_counts(addr, True)
                 else:
