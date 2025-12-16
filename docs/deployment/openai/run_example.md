@@ -19,7 +19,6 @@
 
 ## 启动命令
 
-
 ```bash
 
 VLLM_USE_V1=1 python -m lm_service.entrypoints.openai.epd_api_server \
@@ -64,7 +63,7 @@ VLLM_USE_V1=1 python -m lm_service.entrypoints.openai.epd_api_server \
 | `--allowed-local-media-path`  | 本地资源访问白名单目录                     | `/workspace/`          |
 | `--metastore-client-config`   | 元数据存储配置；格式为 JSON 字符串，指定存储后端与连接参数 | `'{"metastore_client":"RedisMetastoreClient","metastore_address":"redis://127.0.0.1:6379/0"}'` |
 
-**注意：多个proxy需要启动多个http server**
+> 注意：多个 proxy 需要启动多个 http server
 
 ---
 
