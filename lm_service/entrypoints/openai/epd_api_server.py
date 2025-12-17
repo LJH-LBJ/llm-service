@@ -18,10 +18,11 @@ from fastapi import (
     HTTPException,
     Request,
 )
-from fastapi.responses import JSONResponse, StreamingResponse, PlainTextResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from lm_service.entrypoints.cli_args import make_arg_parser
 from lm_service.apis.vllm.proxy import Proxy
 from lm_service.logger_utils import init_logger
+from lm_service.instance_cluster import SERVER_PARAMS_MAP
 from vllm.entrypoints.openai.api_server import (
     validate_json_request,
     ChatCompletionRequest,
@@ -135,19 +136,22 @@ async def create_completion(request: CompletionRequest, raw_request: Request):
     # streaming response
     return StreamingResponse(content=generator, media_type="text/event-stream")
 
+
 @router.get("/check_health")
 @with_cancellation
 async def check_health(raw_request: Request):
     proxy_client: EngineClient = engine_client(raw_request)
     response: dict[str, dict[str, str]] = {}
-    for server_type in proxy_client.active_types:
+    for server_type in SERVER_PARAMS_MAP:
         results: dict[str, bool] = proxy_client.get_check_health_results(
             server_type
         )
         response[server_type.name] = {
             addr: "healthy" if healthy else "unhealthy"
-        for addr, healthy in results.items()}
+            for addr, healthy in results.items()
+        }
     return JSONResponse(content={"results": response})
+
 
 @router.post("/abort")
 @with_cancellation
@@ -278,6 +282,7 @@ def build_app(args: Namespace) -> FastAPI:
     app = FastAPI(lifespan=lifespan)
     app.include_router(router)
     return app
+
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser()

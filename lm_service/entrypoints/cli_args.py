@@ -58,7 +58,7 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
     )
     parser.add_argument(
         "--enable-health-monitor",
-        action='store_true',
+        action="store_true",
         help="Enable health monitor for the proxy client.",
     )
     parser.add_argument(

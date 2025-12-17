@@ -187,7 +187,7 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
             for addr, healthy in self._instances_states.items()
             if not healthy
         ]
-    
+
     def get_instances_states(self) -> dict[str, bool]:
         return self._instances_states
 
