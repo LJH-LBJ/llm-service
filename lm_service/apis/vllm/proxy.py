@@ -425,7 +425,7 @@ class Proxy(EngineClient):
                 prompt_text = prompt["prompt_token_ids"]
             else:
                 raise ValueError(
-                    "Invalid prompt dictionary: " \
+                    "Invalid prompt dictionary: "
                     "must contain 'prompt' or 'prompt_token_ids'."
                 )
         else:
@@ -905,14 +905,14 @@ class Proxy(EngineClient):
             raise TypeError(
                 f"{name} must be a subclass of {base_class.__name__}"
             )
-        
+
     async def get_check_health_results(
         self,
         server_type: ServerType,
     ) -> tuple[list[bool | BaseException], dict[str, zmq.asyncio.Socket]]:
-        service_discovery: HealthCheckServiceDiscovery = (
-            self.instance_clusters[server_type].service_discovery
-        )
+        service_discovery: HealthCheckServiceDiscovery = self.instance_clusters[
+            server_type
+        ].service_discovery
         return await service_discovery.get_check_health_results()
 
 

@@ -142,8 +142,9 @@ async def check_health(raw_request: Request):
     proxy_client: EngineClient = engine_client(raw_request)
     response: dict[str, str] = {}
     for server_type in proxy_client.active_types:
-
-        results, sockets = await proxy_client.get_check_health_results(server_type)
+        results, sockets = await proxy_client.get_check_health_results(
+            server_type
+        )
 
         for addr, result in zip(sockets.keys(), results):
             if isinstance(result, bool):
