@@ -112,7 +112,7 @@ async def main():
         if lm_service_envs.TIMECOUNT_ENABLED:
             # wait for logging
             await asyncio.sleep(envs.VLLM_LOG_STATS_INTERVAL)
-            asyncio.create_task(p.log_metrics())
+            await p.log_metrics()
     finally:
         p.shutdown()
 
