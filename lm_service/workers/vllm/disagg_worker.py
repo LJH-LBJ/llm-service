@@ -475,7 +475,7 @@ def _decode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
             mode = img["mode"]
             decoded_img = Image.frombytes(mode, size, img["data"])
         decoded_list.append(decoded_img)
-    result_images: list[NDArray[Any]] | NDArray[Any]
+    result_images: list[NDArray[Any]] | NDArray[Any| Image.Image]
     if len(decoded_list) == 1:
         result_images = decoded_list[0]
     else:

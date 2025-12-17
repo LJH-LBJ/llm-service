@@ -88,7 +88,7 @@ python -m lm_service.entrypoints.openai.epd_api_server \
 
 ## 核心API
 
-### 1. 聊天接口
+### 1. 聊天补全接口
 
 - **路径**：`/v1/chat/completions`
 - **方法**：POST
@@ -142,7 +142,7 @@ python -m lm_service.entrypoints.openai.epd_api_server \
 
 ---
 
-### 2. 传统补全接口
+### 2. 补全接口
 
 - **路径**：`/v1/completions`
 - **方法**：POST

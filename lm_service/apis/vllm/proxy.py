@@ -417,17 +417,20 @@ class Proxy(EngineClient):
         else:
             self.queues[request_id] = q
 
-        # Support both raw string prompts and dict prompts with multimodal data
-        if "prompt_token_ids" in prompt and self.tokenizer:
-            prompt_text = (
-                prompt["prompt"]
-                if "prompt" in prompt
-                else prompt["prompt_token_ids"]
-            )
+        # Support both raw string prompts and dict prompts with multimodal data.
+        if isinstance(prompt, dict):
+            if "prompt" in prompt:
+                prompt_text = prompt["prompt"]
+            elif "prompt_token_ids" in prompt:
+                prompt_text = prompt["prompt_token_ids"]
+            else:
+                raise ValueError(
+                    "Invalid prompt dictionary: " \
+                    "must contain 'prompt' or 'prompt_token_ids'."
+                )
         else:
-            prompt_text = (
-                prompt["prompt"] if isinstance(prompt, dict) else prompt
-            )
+            # raw string prompt
+            prompt_text = prompt
 
         request = GenerationRequest(
             request_id=request_id,
@@ -902,6 +905,15 @@ class Proxy(EngineClient):
             raise TypeError(
                 f"{name} must be a subclass of {base_class.__name__}"
             )
+        
+    async def get_check_health_results(
+        self,
+        server_type: ServerType,
+    ) -> tuple[list[bool | BaseException], dict[str, zmq.asyncio.Socket]]:
+        service_discovery: HealthCheckServiceDiscovery = (
+            self.instance_clusters[server_type].service_discovery
+        )
+        return await service_discovery.get_check_health_results()
 
 
 def _has_mm_data(prompt: PromptType) -> bool:
@@ -924,7 +936,7 @@ def _encode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
                 "dtype": str(img.dtype),
             }
         elif isinstance(img, Image.Image):
-            # Convert PIL Image to numpy array
+            # Convert PIL Image to bytes
             encoded_img = {
                 "type": "pil",
                 "data": img.tobytes(),
