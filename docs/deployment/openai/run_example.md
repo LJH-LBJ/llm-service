@@ -201,44 +201,6 @@ python -m lm_service.entrypoints.openai.epd_api_server \
     {"status": "ok"}
 
     ```
-
----
-
-## 监控与其它接口
-
-- **路径**：`/metrics`
-- **方法**：GET
-- **描述**：返回模型或服务实例各项运行指标。
-
-    **响应示例：**
-
-    ```text
-
-    Server Type: PD_INSTANCE
-      Address: ipc:///tmp/prefill_decode_0
-        ec_role: PD_INSTANCE
-        addr: ipc:///tmp/prefill_decode_0
-        Avg e2e time requests: 6212.255 ms
-        Avg queue time requests: 0.217 ms
-        Avg prefill time requests: 653.453 ms
-        Avg mean time per output token requests: 76.416 ms
-        Avg time to first token: 4302.684 ms
-        Avg proxy ttft: 10151.510 ms
-        Avg proxy to instance requests time: 1.393 ms
-    Server Type: E_INSTANCE
-      Address: ipc:///tmp/encoder_0
-        ec_role: E_INSTANCE
-        addr: ipc:///tmp/encoder_0
-        Avg e2e time requests: 3926.159 ms
-        Avg queue time requests: 0.219 ms
-        Avg prefill time requests: 3.850 ms
-        Avg mean time per output token requests: 0.000 ms
-        Avg time to first token: 0.000 ms
-        Avg proxy ttft: 0.000 ms
-        Avg proxy to instance requests time: 4.444 ms
-
-    ```
-
 ---
 
 ## 未实现接口
