@@ -4,6 +4,7 @@
 import asyncio
 import os
 import time
+from PIL import Image
 import uuid
 from collections.abc import AsyncGenerator, Mapping
 from typing import Any, Optional, Union
@@ -20,7 +21,11 @@ from vllm.lora.request import LoRARequest
 from vllm.outputs import CompletionOutput, PoolingRequestOutput, RequestOutput
 from vllm.pooling_params import PoolingParams
 from vllm.sampling_params import SamplingParams
-from vllm.transformers_utils.tokenizer import AnyTokenizer
+from vllm.transformers_utils.tokenizer import (
+    AnyTokenizer,
+    init_tokenizer_from_configs,
+)
+from vllm.tasks import SupportedTask
 from vllm.utils import Device, get_ip, get_open_port
 from lm_service.protocol.protocol import (
     ExitRequest,
@@ -78,6 +83,7 @@ class Proxy(EngineClient):
 
     def __init__(
         self,
+        vllm_config: Optional[VllmConfig] = None,
         proxy_addr: Optional[str] = None,
         encode_addr_list: Optional[list[str]] = None,
         pd_addr_list: Optional[list[str]] = None,
@@ -90,7 +96,9 @@ class Proxy(EngineClient):
         health_threshold: int = 3,
         transfer_protocol: Optional[str] = None,
         metastore_client_config: Optional[dict] = None,
+        log_stats: bool = True,
     ):
+        self.vllm_config = vllm_config
         # Validate input parameters for some components
         self._check_type("enable_health_monitor", enable_health_monitor, bool)
         self._check_positive("health_check_interval", health_check_interval)
@@ -106,6 +114,7 @@ class Proxy(EngineClient):
         )
         self.ctx = zmq.asyncio.Context()
 
+        self.log_stats = log_stats
         self.enable_health_monitor = enable_health_monitor
         self.health_check_interval = health_check_interval
         self.health_threshold = health_threshold
@@ -113,7 +122,11 @@ class Proxy(EngineClient):
         self.metastore_client: Optional[MetastoreClientBase] = None
         self.router = router
         self.is_pd_merged = True
-
+        self.tokenizer = (
+            init_tokenizer_from_configs(model_config=vllm_config.model_config)
+            if vllm_config
+            else None
+        )
         # Dummy: needed for EngineClient Protocol.
         self.model_config = ModelConfig(
             model=model_name,
@@ -236,7 +249,7 @@ class Proxy(EngineClient):
         metrics_logger = MetricsReporter(
             server_type=engine_type,
             instances=socket_dict,
-            get_metrics_func=self.get_metrics,
+            get_metrics_func=self.fetch_metrics_from_instance,
         )
         request_stats_monitor = RequestStatsMonitor(socket_dict)
         route_policy = f"LM_SERVICE_{engine_type.name}_ROUTER"
@@ -268,10 +281,17 @@ class Proxy(EngineClient):
         if self.metastore_client is not None:
             self.metastore_client.close()
 
+    # TODO: Optimize log metrics logic; make it a built-in capability
+    # and print at regular intervals.
     async def log_metrics(self) -> None:
+        # lazy initialization
+        if self.output_handler is None:
+            self.output_handler = asyncio.create_task(
+                self._run_output_handler()
+            )
         for server_type in self.instance_clusters:
             cluster = self.instance_clusters[server_type]
-            await cluster.get_metrics()
+            await cluster.log_metrics()
 
     def connect_to_socket(
         self, addr_list: list[str]
@@ -366,8 +386,20 @@ class Proxy(EngineClient):
         else:
             self.queues[request_id] = q
 
-        # Support both raw string prompts and dict prompts with multimodal data
-        prompt_text = prompt["prompt"] if isinstance(prompt, dict) else prompt
+        # Support both raw string prompts and dict prompts with multimodal data.
+        if isinstance(prompt, dict):
+            if "prompt" in prompt:
+                prompt_text = prompt["prompt"]
+            elif "prompt_token_ids" in prompt:
+                prompt_text = prompt["prompt_token_ids"]
+            else:
+                raise ValueError(
+                    "Invalid prompt dictionary: "
+                    "must contain 'prompt' or 'prompt_token_ids'."
+                )
+        else:
+            # raw string prompt
+            prompt_text = prompt
 
         request = GenerationRequest(
             request_id=request_id,
@@ -618,7 +650,13 @@ class Proxy(EngineClient):
         raise NotImplementedError
 
     async def get_tokenizer(self) -> AnyTokenizer:
-        raise NotImplementedError
+        if self.tokenizer is None:
+            raise ValueError(
+                "Tokenizer not initialized. Ensure vllm_config "
+                "is provided when creating the Proxy instance."
+            )
+
+        return self.tokenizer
 
     async def is_tracing_enabled(self) -> bool:
         return False
@@ -663,7 +701,9 @@ class Proxy(EngineClient):
         finally:
             self.queues.pop(request_id, None)
 
-    async def get_metrics(self, server_type: ServerType, addr: str):
+    async def fetch_metrics_from_instance(
+        self, server_type: ServerType, addr: str
+    ) -> dict[str, dict[str, str]]:
         request_id = str(uuid.uuid4())
         request = MetricsRequest(
             request_id=request_id, proxy_addr=self.proxy_addr
@@ -680,10 +720,9 @@ class Proxy(EngineClient):
             await socket.send_multipart(msg, copy=False)
             response = await q.get()
             # calculate proxy to pd/encode time
-            if (
-                isinstance(response, MetricsResponse)
-                and response.metrics is not None
-            ):
+            if isinstance(response, Exception):
+                raise response
+            else:
                 # calculate proxy to pd/encode time average
                 # add to metrics
                 proxy_ttft_avg: float = 0.0
@@ -704,10 +743,6 @@ class Proxy(EngineClient):
                     )
 
                 return response.metrics
-            elif isinstance(response, Exception):
-                raise response
-            else:
-                return None
 
         except Exception as e:
             raise RuntimeError(
@@ -789,6 +824,9 @@ class Proxy(EngineClient):
     async def reset_mm_cache(self) -> None:
         raise NotImplementedError
 
+    async def get_supported_tasks(self) -> tuple[SupportedTask, ...]:
+        return ("generate",)
+
     async def _get_socket_and_server_types_from_addr(
         self,
         addr: str,
@@ -830,6 +868,17 @@ class Proxy(EngineClient):
                 f"{name} must be a subclass of {base_class.__name__}"
             )
 
+    def get_check_health_results(self) -> dict[str, dict[str, bool]]:
+        # Return health check results for each server type
+        results: dict[str, dict[str, bool]] = {}
+        for server_type, cluster in self.instance_clusters.items():
+            service_discovery: HealthCheckServiceDiscovery = (
+                cluster.service_discovery
+            )
+            states = service_discovery.get_instances_states()
+            results[server_type.name] = states
+        return results
+
 
 def _has_mm_data(prompt: PromptType) -> bool:
     if isinstance(prompt, dict):
@@ -850,5 +899,18 @@ def _encode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
                 "shape": img.shape,
                 "dtype": str(img.dtype),
             }
-            encoded_images.append(encoded_img)
+        elif isinstance(img, Image.Image):
+            # Convert PIL Image to bytes
+            encoded_img = {
+                "type": "pil",
+                "data": img.tobytes(),
+                "size": img.size,
+                "mode": img.mode,
+            }
+        else:
+            raise ValueError(
+                f"Unsupported image type: {type(img)}. "
+                "Supported types are numpy.ndarray and PIL.Image.Image."
+            )
+        encoded_images.append(encoded_img)
     return {"image": encoded_images}
