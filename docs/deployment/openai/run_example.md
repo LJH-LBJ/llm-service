@@ -193,7 +193,7 @@ python -m lm_service.entrypoints.openai.epd_api_server \
 
 - **路径**：`/check_health`
 - **方法**：GET
-- **描述**：服务健康状态自检。
+- **描述**：服务健康状态自检。需使能enable_health_monitor开关。
 - **成功响应**：
 
     ```json
