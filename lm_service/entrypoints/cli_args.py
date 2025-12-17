@@ -57,6 +57,12 @@ def make_arg_parser(parser: FlexibleArgumentParser) -> FlexibleArgumentParser:
         help="ZMQ transfer protocol, whether ZMQ uses IPC or TCP connection",
     )
     parser.add_argument(
+        "--enable-health-monitor",
+        type=bool,
+        default=False,
+        help="Enable health monitor for the proxy client.",
+    )
+    parser.add_argument(
         "--metastore-client-config",
         type=json.loads,
         default=None,

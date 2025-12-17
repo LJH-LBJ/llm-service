@@ -267,7 +267,7 @@ async def build_async_proxy_client(
         metastore_client_config=args.metastore_client_config,
         log_stats=not args.disable_log_stats,
         model_name=args.model,
-        enable_health_monitor=False,
+        enable_health_monitor=args.enable_health_monitor,
     )
     yield p
     p.shutdown()
