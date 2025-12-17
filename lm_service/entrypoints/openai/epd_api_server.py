@@ -22,7 +22,6 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from lm_service.entrypoints.cli_args import make_arg_parser
 from lm_service.apis.vllm.proxy import Proxy
 from lm_service.logger_utils import init_logger
-from lm_service.instance_cluster import SERVER_PARAMS_MAP
 from vllm.entrypoints.openai.api_server import (
     validate_json_request,
     ChatCompletionRequest,
