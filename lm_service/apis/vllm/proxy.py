@@ -91,6 +91,11 @@ class Proxy(EngineClient):
         transfer_protocol: Optional[str] = None,
         metastore_client_config: Optional[dict] = None,
     ):
+        self._check_type("enable_health_monitor", enable_health_monitor, bool)
+        self._check_positive("health_check_interval", health_check_interval)
+        self._check_positive("health_threshold", health_threshold)
+        self._check_subclass("router", router, RoutingInterface)
+
         self.instance_clusters: dict[ServerType, InstanceCluster] = {}
         self.queues: dict[str, asyncio.Queue] = {}
         # This "Encoder" is used for handling message types, not for "Encode - Prefill - Decode"
@@ -139,13 +144,15 @@ class Proxy(EngineClient):
             config: MetastoreClientConfig = json_to_metastore_config(
                 metastore_client_config
             )
-            local_ip = lm_service_envs.LM_SERVICE_HOST_IP or get_ip()
-            proxy_port = (
-                int(lm_service_envs.LM_SERVICE_RPC_PORT)
-                if lm_service_envs.LM_SERVICE_RPC_PORT
-                else get_open_port()
-            )
-            proxy_addr = f"{local_ip}:{proxy_port}"
+            if proxy_addr is None:
+                local_ip = lm_service_envs.LM_SERVICE_HOST_IP or get_ip()
+                proxy_port = (
+                    int(lm_service_envs.LM_SERVICE_RPC_PORT)
+                    if lm_service_envs.LM_SERVICE_RPC_PORT
+                    else get_open_port()
+                )
+                proxy_addr = f"{local_ip}:{proxy_port}"
+
             self.proxy_addr = f"{self.transfer_protocol}://{proxy_addr}"
             if is_addr_ipv6(proxy_addr) and self.transfer_protocol == "tcp":
                 self.ctx.setsockopt(zmq.constants.IPV6, 1)
@@ -153,7 +160,7 @@ class Proxy(EngineClient):
                 MetastoreClientFactory.create_metastore_client(
                     config=config,
                     node_info=self.proxy_addr,
-                    engine_type=ServerType.PROXY.value,
+                    server_type=ServerType.PROXY.value,
                     to_encode_sockets=self.to_encode_sockets,
                     to_pd_sockets=self.to_pd_sockets,
                     to_p_sockets=self.to_p_sockets,
@@ -366,10 +373,6 @@ class Proxy(EngineClient):
                 self._run_output_handler()
             )
 
-        # lazy init all health monitors
-        for cluster in self.instance_clusters.values():
-            cluster.lazy_init_health_monitor()
-
         if not request_id:
             request_id = uuid.uuid4().hex
 
@@ -432,6 +435,12 @@ class Proxy(EngineClient):
 
         except msgspec.ValidationError as e:
             raise RuntimeError(f"Invalid Parameters: {e}.") from e
+        except RuntimeError as e:
+            logger.error(f"Runtime error during generate: {e}")
+        except Exception as e:
+            # Log any unexpected exception but do not re-raise to ensure
+            # request cleanup in finally block.
+            logger.error("Unexpected error during generate: %s", e)
         finally:
             self.queues.pop(request_id, None)
 
@@ -483,8 +492,9 @@ class Proxy(EngineClient):
         address = worker_register_req.address
         server_type = worker_register_req.server_type
 
-        if server_type in self.server_to_socket_map:
-            socket_dict = self.server_to_socket_map[server_type]
+        if server_type in self.instance_clusters:
+            cluster = self.instance_clusters[server_type]
+            socket_dict = cluster.sockets
             if address not in socket_dict:
                 try:
                     socket = self.ctx.socket(zmq.constants.PUSH)
@@ -494,7 +504,7 @@ class Proxy(EngineClient):
                         f"Failed to connect to worker {address} with error: {e}"
                     )
                     return
-                cluster_lock = self.instance_clusters[server_type].socket_lock
+                cluster_lock = cluster.socket_lock
                 async with cluster_lock:
                     socket_dict[address] = socket
                     logger.info(f"Connected to worker {address} success")
@@ -524,6 +534,12 @@ class Proxy(EngineClient):
             socket = self.ctx.socket(zmq.constants.PULL)
             socket.bind(self.proxy_addr)
             timeout = self.health_check_interval * self.health_threshold / 2
+            # lazy init all health monitors
+            for cluster in self.instance_clusters.values():
+                cluster.lazy_init_health_monitor()
+
+            if self.metastore_client is not None:
+                self.metastore_client.launch_proxy_task()
 
             while True:
                 # To kill the failed requests quickly, we check unhealthy endpoints
@@ -816,6 +832,26 @@ class Proxy(EngineClient):
     ) -> None:
         cluster = self.instance_clusters[server_type]
         await cluster.service_discovery.remove_instance(addr)
+
+    def _check_type(self, name, value, expected_type):
+        if not isinstance(value, expected_type):
+            raise TypeError(
+                f"{name} must be {expected_type.__name__}, ",
+                f"got {type(value).__name__}",
+            )
+
+    def _check_positive(self, name, value):
+        try:
+            if value <= 0:
+                raise ValueError
+        except Exception:
+            raise ValueError(f"{name} must be a positive number")
+
+    def _check_subclass(self, name, value, base_class):
+        if not isinstance(value, type) or not issubclass(value, base_class):
+            raise TypeError(
+                f"{name} must be a subclass of {base_class.__name__}"
+            )
 
 
 def _has_mm_data(prompt: PromptType) -> bool:
