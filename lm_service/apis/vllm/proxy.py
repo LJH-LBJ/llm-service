@@ -297,21 +297,6 @@ class Proxy(EngineClient):
         if self.metastore_client is not None:
             self.metastore_client.close()
 
-    async def get_metrics(self) -> dict[str, dict[str, str]]:
-        # lazy initialization
-        if self.output_handler is None:
-            self.output_handler = asyncio.create_task(
-                self._run_output_handler()
-            )
-        results = {}
-        for server_type in self.instance_clusters:
-            cluster = self.instance_clusters[server_type]
-            # result: [addr, metrics_msg or error_msg]
-            result = await cluster.get_metrics()
-            results[server_type.name] = result
-        # results: [server_type [addr, metrics_msg or error_msg]]
-        return results
-
     # TODO: Optimize log metrics logic; make it a built-in capability
     # and print at regular intervals.
     async def log_metrics(self) -> None:
@@ -906,14 +891,14 @@ class Proxy(EngineClient):
                 f"{name} must be a subclass of {base_class.__name__}"
             )
 
-    async def get_check_health_results(
+    def get_check_health_results(
         self,
         server_type: ServerType,
-    ) -> tuple[list[bool | BaseException], dict[str, zmq.asyncio.Socket]]:
+    ) -> dict[str, bool]:
         service_discovery: HealthCheckServiceDiscovery = self.instance_clusters[
             server_type
         ].service_discovery
-        return await service_discovery.get_check_health_results()
+        return service_discovery.get_instances_states()
 
 
 def _has_mm_data(prompt: PromptType) -> bool:

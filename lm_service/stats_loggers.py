@@ -268,11 +268,6 @@ class MetricsReporter:
         self.proxy_ttft_total += time.perf_counter() - start
         return True
 
-    async def get_metrics(self) -> dict[str, str]:
-        # metrics: [addr, metrics_msg or error_msg]
-        metrics = await self.build_metrics_msg()
-        return metrics
-
     async def log_metrics(self) -> None:
         # metrics: [addr, metrics_msg or error_msg]
         metrics = await self.build_metrics_msg()

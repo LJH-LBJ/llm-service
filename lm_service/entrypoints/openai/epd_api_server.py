@@ -135,51 +135,19 @@ async def create_completion(request: CompletionRequest, raw_request: Request):
     # streaming response
     return StreamingResponse(content=generator, media_type="text/event-stream")
 
-
 @router.get("/check_health")
 @with_cancellation
 async def check_health(raw_request: Request):
     proxy_client: EngineClient = engine_client(raw_request)
-    response: dict[str, str] = {}
+    response: dict[str, dict[str, str]] = {}
     for server_type in proxy_client.active_types:
-        results, sockets = await proxy_client.get_check_health_results(
+        results: dict[str, bool] = proxy_client.get_check_health_results(
             server_type
         )
-
-        for addr, result in zip(sockets.keys(), results):
-            if isinstance(result, bool):
-                response[str(server_type.name) + "-" + addr] = (
-                    "Healthy" if result else "Unhealthy"
-                )
-            elif isinstance(result, asyncio.TimeoutError):
-                raise HTTPException(
-                    status_code=HTTPStatus.GATEWAY_TIMEOUT.value,
-                    detail=f"Health check timed out for server_type={server_type.name}, addr={addr}",
-                )
-            elif isinstance(result, Exception):
-                raise HTTPException(
-                    status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value,
-                    detail=str(result),
-                ) from result
+        response[server_type.name] = {
+            addr: "healthy" if healthy else "unhealthy"
+        for addr, healthy in results.items()}
     return JSONResponse(content={"results": response})
-
-
-@router.get("/metrics")
-@with_cancellation
-async def metrics(raw_request: Request):
-    proxy_client: EngineClient = engine_client(raw_request)
-    try:
-        # total_metrics: [server_type [addr, metrics_msg or error_msg]]
-        total_metrics = await proxy_client.get_metrics()
-        return PlainTextResponse(
-            status_code=HTTPStatus.OK.value,
-            content=metrics_to_readable_format(total_metrics),
-        )
-    except Exception as e:
-        raise HTTPException(
-            status_code=HTTPStatus.INTERNAL_SERVER_ERROR.value, detail=str(e)
-        ) from e
-
 
 @router.post("/abort")
 @with_cancellation
@@ -310,21 +278,6 @@ def build_app(args: Namespace) -> FastAPI:
     app = FastAPI(lifespan=lifespan)
     app.include_router(router)
     return app
-
-
-def metrics_to_readable_format(metrics: dict) -> str:
-    """Convert metrics dict to a readable string format."""
-    lines = []
-    for server_type, addr_metrics in metrics.items():
-        lines.append(f"Server Type: {server_type}")
-        for addr, metric_msg in addr_metrics.items():
-            lines.append(f"  Address: {addr}")
-            sub_msgs = metric_msg.strip().split(", ")
-            for sub_msg in sub_msgs:
-                if sub_msg:
-                    lines.append(f"    {sub_msg}")
-    return "\n".join(lines) + "\n"
-
 
 if __name__ == "__main__":
     parser = FlexibleArgumentParser()
