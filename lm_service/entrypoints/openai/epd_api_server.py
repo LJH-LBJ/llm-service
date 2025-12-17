@@ -141,16 +141,8 @@ async def create_completion(request: CompletionRequest, raw_request: Request):
 @with_cancellation
 async def check_health(raw_request: Request):
     proxy_client: EngineClient = engine_client(raw_request)
-    response: dict[str, dict[str, str]] = {}
-    for server_type in SERVER_PARAMS_MAP:
-        results: dict[str, bool] = proxy_client.get_check_health_results(
-            server_type
-        )
-        response[server_type.name] = {
-            addr: "healthy" if healthy else "unhealthy"
-            for addr, healthy in results.items()
-        }
-    return JSONResponse(content={"results": response})
+    results = proxy_client.get_check_health_results()
+    return JSONResponse(content={"results": results})
 
 
 @router.post("/abort")

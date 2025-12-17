@@ -868,14 +868,16 @@ class Proxy(EngineClient):
                 f"{name} must be a subclass of {base_class.__name__}"
             )
 
-    def get_check_health_results(
-        self,
-        server_type: ServerType,
-    ) -> dict[str, bool]:
-        service_discovery: HealthCheckServiceDiscovery = self.instance_clusters[
-            server_type
-        ].service_discovery
-        return service_discovery.get_instances_states()
+    def get_check_health_results(self) -> dict[str, dict[str, bool]]:
+        # Return health check results for each server type
+        results: dict[str, dict[str, bool]] = {}
+        for server_type, cluster in self.instance_clusters.items():
+            service_discovery: HealthCheckServiceDiscovery = (
+                cluster.service_discovery
+            )
+            states = service_discovery.get_instances_states()
+            results[server_type.name] = states
+        return results
 
 
 def _has_mm_data(prompt: PromptType) -> bool:
