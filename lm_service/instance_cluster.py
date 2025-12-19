@@ -113,7 +113,7 @@ class InstanceCluster:
                 addr, request_id=request.request_id
             )
 
-    async def process_request(self, request, q):
+    async def process_request(self, request, q) -> GenerationResponse:
         msg = self._prepare_msg(request)
         async with self.socket_lock:
             health_endpoints = self._get_health_endpoints()
@@ -138,6 +138,7 @@ class InstanceCluster:
             else:
                 # mark instance latest successful response time
                 self.service_discovery.update_latest_success(addr)
+                return response
         finally:
             self.stats_monitor.on_request_completed(
                 addr, request_id=request.request_id

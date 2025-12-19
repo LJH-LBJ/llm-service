@@ -318,9 +318,9 @@ class Proxy(EngineClient):
         server_type: ServerType,
         request: GenerationRequest,
         q: asyncio.Queue[Union[Exception, GenerationResponse]],
-    ):
+    ) -> GenerationResponse:
         cluster = self.instance_clusters[server_type]
-        await cluster.process_request(request, q)
+        return await cluster.process_request(request, q)
 
     async def _process_request_streaming_response(
         self,
@@ -360,6 +360,7 @@ class Proxy(EngineClient):
             prompt_logprobs=None,
             outputs=[completion],
             finished=resp.finish_reason is not None,
+            capture_metrics_result=resp.capture_metrics_result,
         )
 
     async def generate(
@@ -386,8 +387,10 @@ class Proxy(EngineClient):
         else:
             self.queues[request_id] = q
 
+        enable_metrics: Optional[dict[str, bool]] = None
         # Support both raw string prompts and dict prompts with multimodal data.
         if isinstance(prompt, dict):
+            enable_metrics = prompt.get("enable_metrics", None)
             if "prompt" in prompt:
                 prompt_text = prompt["prompt"]
             elif "prompt_token_ids" in prompt:
@@ -406,6 +409,7 @@ class Proxy(EngineClient):
             prompt=prompt_text,
             sampling_params=sampling_params,
             proxy_addr=self.proxy_addr,
+            enable_metrics=enable_metrics
         )
 
         try:
@@ -420,7 +424,7 @@ class Proxy(EngineClient):
                 request.multi_modal_data = _encode_mm_data(
                     prompt["multi_modal_data"]
                 )
-                await self._process_request(ServerType.E_INSTANCE, request, q)
+                e_response = await self._process_request(ServerType.E_INSTANCE, request, q)
 
             # Step 2 : Maybe Prefill
             if not self.is_pd_merged:
@@ -436,6 +440,7 @@ class Proxy(EngineClient):
             async for d_response in self._process_request_streaming_response(
                 decode_server_type, request, q
             ):
+                d_response.capture_metrics_result = e_response.capture_metrics_result if e_response.capture_metrics_result is not None else None
                 yield self._to_request_output(d_response)
                 ttft_recorded_flag = decode_cluster.cal_proxy_ttft(
                     ttft_recorded_flag,

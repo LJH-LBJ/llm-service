@@ -435,6 +435,8 @@ class DisaggWorker:
                 prompt_payload["multi_modal_data"] = _decode_mm_data(
                     req.multi_modal_data
                 )
+            if req.enable_metrics is not None:
+                prompt_payload["enable_metrics"] = req.enable_metrics
 
             generator = self.engine.generate(
                 prompt=prompt_payload,

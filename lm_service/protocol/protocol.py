@@ -57,6 +57,7 @@ class GenerationResponse(msgspec.Struct):
     # TODO: support full protocol.
     logprobs = None
     proxy_to_worker_time_end: Optional[float] = None
+    capture_metrics_result: Optional[dict[str, Any]] = None
 
     @classmethod
     def from_request_output(
@@ -71,6 +72,7 @@ class GenerationResponse(msgspec.Struct):
             prompt_token_ids=request_output.prompt_token_ids,
             finish_reason=out.finish_reason,
             stop_reason=str(out.stop_reason),
+            capture_metrics_result=request_output.capture_metrics_result,
         )
 
 
@@ -80,6 +82,7 @@ class GenerationRequest(msgspec.Struct):
     sampling_params: SamplingParams
     proxy_addr: str
     multi_modal_data: Optional[dict[str, Any]] = None
+    enable_metrics: Optional[dict[str, bool]] = None
 
 
 class HeartbeatRequest(msgspec.Struct):
