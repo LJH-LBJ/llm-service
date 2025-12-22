@@ -444,7 +444,7 @@ class Proxy(EngineClient):
             async for d_response in self._process_request_streaming_response(
                 decode_server_type, request, q
             ):
-                if (enable_metrics := getattr(request, "enable_metrics", None)) and enable_metrics.get("encode", False):
+                if metrics_enabled(request, "encode"):
                     if not (metrics:= d_response.capture_metrics_result):
                         d_response.capture_metrics_result = metrics = {}
                     metrics["encode_time_ms"] = encode_time * 1000
@@ -926,3 +926,7 @@ def _encode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
             )
         encoded_images.append(encoded_img)
     return {"image": encoded_images}
+
+def metrics_enabled(req: GenerationRequest, key: str) -> bool:
+    req_enable_metrics = getattr(req, "enable_metrics", None)
+    return isinstance(req_enable_metrics, dict) and bool(req_enable_metrics.get(key, False))
