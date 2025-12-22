@@ -445,7 +445,9 @@ class Proxy(EngineClient):
                 decode_server_type, request, q
             ):
                 if request.enable_metrics is not None and request.enable_metrics.get("encode", False):
-                    d_response.capture_metrics_result["encode_time_ms"] = encode_time
+                    if not (metrics:= d_response.capture_metrics_result):
+                        d_response.capture_metrics_result = metrics = {}
+                    metrics["encode_time_ms"] = encode_time * 1000
                 yield self._to_request_output(d_response)
                 ttft_recorded_flag = decode_cluster.cal_proxy_ttft(
                     ttft_recorded_flag,
