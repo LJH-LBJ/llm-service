@@ -441,7 +441,6 @@ class Proxy(EngineClient):
                 else ServerType.D_INSTANCE
             )
             decode_cluster = self.instance_clusters[decode_server_type]
-            
             async for d_response in self._process_request_streaming_response(
                 decode_server_type, request, q
             ):

@@ -5,7 +5,6 @@ import asyncio
 from collections import defaultdict
 import threading
 import time
-from tracemalloc import start
 from typing import ClassVar, Optional, Union
 
 import zmq
