@@ -318,9 +318,9 @@ class Proxy(EngineClient):
         server_type: ServerType,
         request: GenerationRequest,
         q: asyncio.Queue[Union[Exception, GenerationResponse]],
-    ) -> GenerationResponse:
+    ):
         cluster = self.instance_clusters[server_type]
-        return await cluster.process_request(request, q)
+        await cluster.process_request(request, q)
 
     async def _process_request_streaming_response(
         self,
@@ -409,7 +409,7 @@ class Proxy(EngineClient):
             prompt=prompt_text,
             sampling_params=sampling_params,
             proxy_addr=self.proxy_addr,
-            enable_metrics=enable_metrics
+            enable_metrics=enable_metrics,
         )
 
         try:
@@ -420,11 +420,15 @@ class Proxy(EngineClient):
             request = msgspec.convert(req_dict, GenerationRequest, strict=True)
 
             # Step 1 : Encode the multimodal data if any
+            encode_time: float = 0.0
             if _has_mm_data(prompt):
                 request.multi_modal_data = _encode_mm_data(
                     prompt["multi_modal_data"]
                 )
-                e_response = await self._process_request(ServerType.E_INSTANCE, request, q)
+                encode_cluster = self.instance_clusters[ServerType.E_INSTANCE]
+
+                await self._process_request(ServerType.E_INSTANCE, request, q)
+                encode_time = encode_cluster.cal_encode_time(start=proxy_ttft_start)
 
             # Step 2 : Maybe Prefill
             if not self.is_pd_merged:
@@ -437,10 +441,12 @@ class Proxy(EngineClient):
                 else ServerType.D_INSTANCE
             )
             decode_cluster = self.instance_clusters[decode_server_type]
+            
             async for d_response in self._process_request_streaming_response(
                 decode_server_type, request, q
             ):
-                d_response.capture_metrics_result = e_response.capture_metrics_result if e_response.capture_metrics_result is not None else None
+                if request.enable_metrics is not None and request.enable_metrics.get("encode", False):
+                    d_response.capture_metrics_result["encode_time_ms"] = encode_time
                 yield self._to_request_output(d_response)
                 ttft_recorded_flag = decode_cluster.cal_proxy_ttft(
                     ttft_recorded_flag,

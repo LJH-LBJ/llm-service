@@ -113,7 +113,7 @@ class InstanceCluster:
                 addr, request_id=request.request_id
             )
 
-    async def process_request(self, request, q) -> GenerationResponse:
+    async def process_request(self, request, q):
         msg = self._prepare_msg(request)
         async with self.socket_lock:
             health_endpoints = self._get_health_endpoints()
@@ -138,7 +138,6 @@ class InstanceCluster:
             else:
                 # mark instance latest successful response time
                 self.service_discovery.update_latest_success(addr)
-                return response
         finally:
             self.stats_monitor.on_request_completed(
                 addr, request_id=request.request_id
@@ -211,6 +210,9 @@ class InstanceCluster:
             proxy_ttft_start,
             response,
         )
+    
+    def cal_encode_time(self, start: float) -> float:
+        return time.perf_counter() - start
 
     def get_avg_proxy_to_instance_time(self, addr: str) -> float:
         return self.metrics_logger.get_avg_proxy_to_instance_time(addr)

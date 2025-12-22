@@ -72,7 +72,6 @@ class GenerationResponse(msgspec.Struct):
             prompt_token_ids=request_output.prompt_token_ids,
             finish_reason=out.finish_reason,
             stop_reason=str(out.stop_reason),
-            capture_metrics_result=request_output.capture_metrics_result,
         )
 
 
