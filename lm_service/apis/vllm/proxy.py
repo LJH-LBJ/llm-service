@@ -444,7 +444,7 @@ class Proxy(EngineClient):
             async for d_response in self._process_request_streaming_response(
                 decode_server_type, request, q
             ):
-                if request.enable_metrics is not None and request.enable_metrics.get("encode", False):
+                if request.get("enable_metrics", False) and request.enable_metrics.get("encode", False):
                     if not (metrics:= d_response.capture_metrics_result):
                         d_response.capture_metrics_result = metrics = {}
                     metrics["encode_time_ms"] = encode_time * 1000
