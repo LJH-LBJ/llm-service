@@ -210,7 +210,7 @@ class InstanceCluster:
             proxy_ttft_start,
             response,
         )
-    
+
     def cal_encode_time(self, start: float) -> float:
         return time.perf_counter() - start
 

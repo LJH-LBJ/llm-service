@@ -428,7 +428,9 @@ class Proxy(EngineClient):
                 encode_cluster = self.instance_clusters[ServerType.E_INSTANCE]
 
                 await self._process_request(ServerType.E_INSTANCE, request, q)
-                encode_time = encode_cluster.cal_encode_time(start=proxy_ttft_start)
+                encode_time = encode_cluster.cal_encode_time(
+                    start=proxy_ttft_start
+                )
 
             # Step 2 : Maybe Prefill
             if not self.is_pd_merged:
@@ -445,7 +447,7 @@ class Proxy(EngineClient):
                 decode_server_type, request, q
             ):
                 if metrics_enabled(request, "encode"):
-                    if not (metrics:= d_response.capture_metrics_result):
+                    if not (metrics := d_response.capture_metrics_result):
                         d_response.capture_metrics_result = metrics = {}
                     metrics["encode_time_ms"] = encode_time * 1000
                 yield self._to_request_output(d_response)
@@ -927,6 +929,9 @@ def _encode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
         encoded_images.append(encoded_img)
     return {"image": encoded_images}
 
+
 def metrics_enabled(req: GenerationRequest, key: str) -> bool:
     req_enable_metrics = getattr(req, "enable_metrics", None)
-    return isinstance(req_enable_metrics, dict) and bool(req_enable_metrics.get(key, False))
+    return isinstance(req_enable_metrics, dict) and bool(
+        req_enable_metrics.get(key, False)
+    )
