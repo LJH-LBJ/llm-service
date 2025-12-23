@@ -227,8 +227,5 @@ class InstanceCluster:
             response,
         )
 
-    def cal_encode_time(self, start: float) -> float:
-        return time.perf_counter() - start
-
     def get_avg_proxy_to_instance_time(self, addr: str) -> float:
         return self.metrics_logger.get_avg_proxy_to_instance_time(addr)

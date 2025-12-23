@@ -430,12 +430,8 @@ class Proxy(EngineClient):
                 request.multi_modal_data = _encode_mm_data(
                     prompt["multi_modal_data"]
                 )
-                encode_cluster = self.instance_clusters[ServerType.E_INSTANCE]
-
                 await self._process_request(ServerType.E_INSTANCE, request, q)
-                encode_time = encode_cluster.cal_encode_time(
-                    start=proxy_ttft_start
-                )
+                encode_time = cal_encode_time(start=proxy_ttft_start)
 
             # Step 2 : Maybe Prefill
             if not self.is_pd_merged:
@@ -946,3 +942,6 @@ def metrics_enabled(req: GenerationRequest, key: str) -> bool:
     return isinstance(req_enable_metrics, dict) and bool(
         req_enable_metrics.get(key, False)
     )
+
+def cal_encode_time(start: float) -> float:
+    return time.perf_counter() - start
