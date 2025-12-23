@@ -431,7 +431,7 @@ class Proxy(EngineClient):
                     prompt["multi_modal_data"]
                 )
                 await self._process_request(ServerType.E_INSTANCE, request, q)
-                encode_time = cal_encode_time(start=proxy_ttft_start)
+                encode_time = cal_exec_time(start=proxy_ttft_start)
 
             # Step 2 : Maybe Prefill
             if not self.is_pd_merged:
@@ -943,5 +943,5 @@ def metrics_enabled(req: GenerationRequest, key: str) -> bool:
         req_enable_metrics.get(key, False)
     )
 
-def cal_encode_time(start: float) -> float:
+def cal_exec_time(start: float) -> float:
     return time.perf_counter() - start
