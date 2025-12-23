@@ -182,6 +182,9 @@ class HealthCheckServiceDiscovery(ServiceDiscovery):
             if not healthy
         ]
 
+    def get_instances_states(self) -> dict[str, bool]:
+        return self._instances_states
+
     async def remove_instance(self, addr: str):
         """
         Remove the instance from tracking when it is exited.

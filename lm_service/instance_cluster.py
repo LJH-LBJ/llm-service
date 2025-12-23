@@ -21,18 +21,22 @@ SERVER_PARAMS_MAP = {
     ServerType.E_INSTANCE: {
         "addr_list_name": "encode_addr_list",
         "run_request_type": RequestType.ENCODE,
+        "socket_list_name": "to_e_sockets",
     },
     ServerType.P_INSTANCE: {
         "addr_list_name": "p_addr_list",
         "run_request_type": RequestType.PREFILL,
+        "socket_list_name": "to_p_sockets",
     },
     ServerType.D_INSTANCE: {
         "addr_list_name": "d_addr_list",
         "run_request_type": RequestType.GENERATION,
+        "socket_list_name": "to_d_sockets",
     },
     ServerType.PD_INSTANCE: {
-        "addr_list_name": "pd_addr_list",
+        "addr_list_name": "d_addr_list",
         "run_request_type": RequestType.GENERATION,
+        "socket_list_name": "to_d_sockets",
     },
 }
 
@@ -67,6 +71,20 @@ class InstanceCluster:
 
         # encode payload
         try:
+            if self.server_type == ServerType.P_INSTANCE:
+                kv_transfer_params = {
+                    "do_remote_decode": True,
+                    "do_remote_prefill": False,
+                    "remote_engine_id": None,
+                    "remote_block_ids": None,
+                    "remote_host": None,
+                    "remote_port": None,
+                }
+                request.sampling_params.extra_args = {}
+                request.sampling_params.extra_args["kv_transfer_params"] = (
+                    kv_transfer_params
+                )
+
             payload = self.encoder.encode(request)
         except Exception as e:
             raise RuntimeError("Failed to serialize GenerationRequest") from e
@@ -134,6 +152,8 @@ class InstanceCluster:
             else:
                 # mark instance latest successful response time
                 self.service_discovery.update_latest_success(addr)
+                return response
+
         finally:
             self.stats_monitor.on_request_completed(
                 addr, request_id=request.request_id
@@ -170,8 +190,8 @@ class InstanceCluster:
                 f"without worker response."
             )
 
-    async def get_metrics(self):
-        await self.metrics_logger.get_metrics()
+    async def log_metrics(self) -> None:
+        await self.metrics_logger.log_metrics()
 
     def _get_health_endpoints(self):
         return self.service_discovery.get_health_endpoints()

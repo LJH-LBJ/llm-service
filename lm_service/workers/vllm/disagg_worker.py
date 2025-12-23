@@ -4,6 +4,7 @@
 import asyncio
 import os
 import time
+from PIL import Image
 import uuid
 from typing import Any, Optional, Union
 
@@ -152,22 +153,24 @@ class DisaggWorker:
             self.metastore_client.close()
 
     def get_server_type(self) -> ServerType:
-        if (
-            self.ec_transfer_config
-            and self.ec_transfer_config.ec_role == "ec_producer"
-        ):
-            return ServerType.E_INSTANCE
-        elif self.kv_transfer_config:
+        # E - encode cache producer
+        # P - encode cache consumer & kv cache producer
+        # D - kv cache consumer
+        # PD - ec consumer
+
+        if self.kv_transfer_config:
             if self.kv_transfer_config.kv_role == "kv_producer":
                 return ServerType.P_INSTANCE
-            return ServerType.D_INSTANCE
-        elif (
-            self.ec_transfer_config
-            and self.ec_transfer_config.ec_role == "ec_consumer"
-        ):
-            return ServerType.PD_INSTANCE
-        else:
-            return ServerType.PROXY
+            elif self.kv_transfer_config.kv_role == "kv_consumer":
+                return ServerType.D_INSTANCE
+
+        if self.ec_transfer_config:
+            if self.ec_transfer_config.ec_role == "ec_producer":
+                return ServerType.E_INSTANCE
+            elif self.ec_transfer_config.ec_role == "ec_consumer":
+                return ServerType.PD_INSTANCE
+
+        return ServerType.PROXY
 
     async def _send_worker_register_request(
         self, socket_list: list[zmq.asyncio.Socket]
@@ -469,8 +472,12 @@ def _decode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
             decoded_img = np.frombuffer(
                 bytes(img["data"]), dtype=img["dtype"]
             ).reshape(img["shape"])
-            decoded_list.append(decoded_img)
-    result_images: list[NDArray[Any]] | NDArray[Any]
+        elif img["type"] == "pil":
+            size = tuple(img["size"])
+            mode = img["mode"]
+            decoded_img = Image.frombytes(mode, size, img["data"])
+        decoded_list.append(decoded_img)
+    result_images: list[NDArray[Any]] | NDArray[Any | Image.Image]
     if len(decoded_list) == 1:
         result_images = decoded_list[0]
     else:
