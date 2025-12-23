@@ -431,6 +431,7 @@ class DisaggWorker:
         first_token_flag = True
         try:
             prompt_payload: dict[str, Any] = {"prompt": req.prompt}
+            prompt_payload["prompt_token_ids"] = req.prompt_token_ids
             if req.multi_modal_data is not None:
                 prompt_payload["multi_modal_data"] = _decode_mm_data(
                     req.multi_modal_data
