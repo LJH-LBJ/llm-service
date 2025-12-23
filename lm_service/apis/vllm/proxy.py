@@ -943,5 +943,6 @@ def metrics_enabled(req: GenerationRequest, key: str) -> bool:
         req_enable_metrics.get(key, False)
     )
 
+
 def cal_exec_time(start: float) -> float:
     return time.perf_counter() - start
