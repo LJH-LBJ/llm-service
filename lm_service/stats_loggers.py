@@ -314,9 +314,9 @@ class MetricsReporter:
                         value.get("queue_time_requests", 0.0),
                         value.get("prefill_time_requests", 0.0),
                         # preprocess time = ttft - queue - prefill
-                        value.get("time_to_first_token", 0.0) - \
-                            value.get("queue_time_requests", 0.0) - \
-                                value.get("prefill_time_requests", 0.0), 
+                        value.get("time_to_first_token", 0.0)
+                        - value.get("queue_time_requests", 0.0)
+                        - value.get("prefill_time_requests", 0.0),
                         value.get("mean_time_per_output_token_requests", 0.0),
                         value.get("time_to_first_token", 0.0)
                         if self.has_d_instance()
