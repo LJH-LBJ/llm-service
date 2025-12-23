@@ -395,10 +395,8 @@ class Proxy(EngineClient):
         if isinstance(prompt, dict):
             if "prompt" in prompt:
                 prompt_text = prompt["prompt"]
-                prompt_token_ids = None
             elif "prompt_token_ids" in prompt:
-                prompt_text = None
-                prompt_token_ids = prompt["prompt_token_ids"]
+                prompt_text = prompt["prompt_token_ids"]
             else:
                 raise ValueError(
                     "Invalid prompt dictionary: "
@@ -407,12 +405,10 @@ class Proxy(EngineClient):
         else:
             # raw string prompt
             prompt_text = prompt
-            prompt_token_ids = None
 
         request = GenerationRequest(
             request_id=request_id,
             prompt=prompt_text,
-            prompt_token_ids=prompt_token_ids,
             sampling_params=sampling_params,
             proxy_addr=self.proxy_addr,
         )
