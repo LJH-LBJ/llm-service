@@ -943,7 +943,7 @@ def _encode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
 
 def metrics_enabled(req: GenerationRequest, key: str) -> bool:
     # Check if metrics collection is enabled for a specific key in the request.
-    
+
     req_enable_metrics = getattr(req, "enable_metrics", None)
     return isinstance(req_enable_metrics, dict) and bool(
         req_enable_metrics.get(key, False)
