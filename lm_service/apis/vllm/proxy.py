@@ -949,4 +949,12 @@ def metrics_enabled(req: GenerationRequest, key: str) -> bool:
 
 
 def cal_exec_time(start: float) -> float:
+    """Calculate elapsed time in seconds since a given start timestamp.
+
+    Args:
+        start: The start time, typically obtained from time.perf_counter().
+
+    Returns:
+        The elapsed time in seconds as a floating-point number.
+    """
     return time.perf_counter() - start
