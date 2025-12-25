@@ -365,6 +365,7 @@ class Proxy(EngineClient):
             prompt_logprobs=None,
             outputs=[completion],
             finished=resp.finish_reason is not None,
+            capture_metrics_result=resp.capture_metrics_result,
         )
 
     async def generate(
@@ -391,12 +392,16 @@ class Proxy(EngineClient):
         else:
             self.queues[request_id] = q
 
+        enable_metrics: Optional[dict[str, bool]] = None
         # Support both raw string prompts and dict prompts with multimodal data.
         if isinstance(prompt, dict):
+            enable_metrics = prompt.get("enable_metrics", None)
             if "prompt" in prompt:
                 prompt_text = prompt["prompt"]
+                prompt_token_ids = None
             elif "prompt_token_ids" in prompt:
-                prompt_text = prompt["prompt_token_ids"]
+                prompt_text = None
+                prompt_token_ids = prompt["prompt_token_ids"]
             else:
                 raise ValueError(
                     "Invalid prompt dictionary: "
@@ -405,12 +410,15 @@ class Proxy(EngineClient):
         else:
             # raw string prompt
             prompt_text = prompt
+            prompt_token_ids = None
 
         request = GenerationRequest(
             request_id=request_id,
             prompt=prompt_text,
+            prompt_token_ids=prompt_token_ids,
             sampling_params=sampling_params,
             proxy_addr=self.proxy_addr,
+            enable_metrics=enable_metrics,
         )
 
         try:
@@ -421,11 +429,13 @@ class Proxy(EngineClient):
             request = msgspec.convert(req_dict, GenerationRequest, strict=True)
 
             # Step 1 : Encode the multimodal data if any
+            encode_time: float = 0.0
             if _has_mm_data(prompt):
                 request.multi_modal_data = _encode_mm_data(
                     prompt["multi_modal_data"]
                 )
                 await self._process_request(ServerType.E_INSTANCE, request, q)
+                encode_time = cal_exec_time(start=proxy_ttft_start)
 
             # Step 2 : Maybe Prefill
             if not self.is_pd_merged:
@@ -447,6 +457,10 @@ class Proxy(EngineClient):
             async for d_response in self._process_request_streaming_response(
                 decode_server_type, request, q
             ):
+                if metrics_enabled(request, "encode"):
+                    if not (metrics := d_response.capture_metrics_result):
+                        d_response.capture_metrics_result = metrics = {}
+                    metrics["encode_time_ms"] = encode_time * 1000
                 yield self._to_request_output(d_response)
                 ttft_recorded_flag = decode_cluster.cal_proxy_ttft(
                     ttft_recorded_flag,
@@ -925,3 +939,24 @@ def _encode_mm_data(mm_data: dict[str, Any]) -> dict[str, Any]:
             )
         encoded_images.append(encoded_img)
     return {"image": encoded_images}
+
+
+def metrics_enabled(req: GenerationRequest, key: str) -> bool:
+    # Check if metrics collection is enabled for a specific key in the request.
+
+    req_enable_metrics = getattr(req, "enable_metrics", None)
+    return isinstance(req_enable_metrics, dict) and bool(
+        req_enable_metrics.get(key, False)
+    )
+
+
+def cal_exec_time(start: float) -> float:
+    """Calculate elapsed time in seconds since a given start timestamp.
+
+    Args:
+        start: The start time, typically obtained from time.perf_counter().
+
+    Returns:
+        The elapsed time in seconds as a floating-point number.
+    """
+    return time.perf_counter() - start
