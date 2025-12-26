@@ -2,7 +2,7 @@
 # SPDX-FileCopyrightText: Copyright contributors to the LM-Service project
 
 import os
-from typing import Any, Callable
+from typing import Any, Callable, Optional, Type, TypeVar
 
 from vllm.envs import env_with_choices
 
@@ -11,6 +11,7 @@ from lm_service.logger_utils import init_logger
 logger = init_logger(__name__)
 
 _TRUE_VALUES = {"1", "true", "t", "y", "yes", "on"}
+T = TypeVar("T", int, float)
 
 # --8<-- [start:env-vars-definition]
 environment_variables: dict[str, Callable[[], Any]] = {
@@ -93,28 +94,45 @@ def __getattr__(name: str):
         return environment_variables[name]()
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
-def check_parameter_range(
-        param_name: str,
-        default_value: Any,
-        min_value: int = None,
-        max_value: int = None
-):
-    try:
-        parameter = int(os.getenv(param_name, default_value))
-    except Exception:
-        logger.warning(
-            f"Environment variable {param_name} cannot be converted to int"
-        )
-        return
 
-    if min_value is not None:
-        if parameter < min_value:
-            logger.warning(
-                f"Environment variable {param_name}={parameter} is less than the minimum value {min_value}"
-            )
-            return
-    if max_value is not None:
-        if parameter > max_value:
-            logger.warning(
-                f"Environment variable {param_name}={parameter} is greater than the maximum value {max_value}"
-            )
+def check_parameter_range(
+    param_name: str,
+    default_value: T,
+    min_value: Optional[T] = None,
+    max_value: Optional[T] = None,
+    param_type: Type[T] = int,
+) -> T:
+    """
+    check the environment variable value is within the specified range.
+
+    Args:
+        param_name:     environment variable name
+        default_value:  default value
+        min_value:      minimum value
+        max_value:      maximum value
+        param_type:     type, int/float, default int
+
+    Returns:
+        value after type and range validation
+    """
+    raw = os.getenv(param_name, None)
+    try:
+        value = param_type(raw) if raw is not None else default_value
+    except (ValueError, TypeError):
+        logger.warning(
+            f"{param_name}: Unable to convert '{raw}' to {param_type.__name__}, "
+            f"using default: {default_value}."
+        )
+        value = default_value
+
+    if min_value is not None and value < min_value:
+        logger.warning(
+            f"{param_name}: {value} < min_value {min_value}"
+        )
+
+    if max_value is not None and value > max_value:
+        logger.warning(
+            f"{param_name}: {value} > max_value {max_value}"
+        )
+
+    return value
