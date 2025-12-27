@@ -123,9 +123,9 @@ def check_parameter_range(
         value = default_value
 
     if min_value is not None and value < min_value:
-        logger.warning(f"{param_name}: {value} < min_value {min_value}")
+        raise ValueError(f"{param_name}: {value} < min_value {min_value}")
 
     if max_value is not None and value > max_value:
-        logger.warning(f"{param_name}: {value} > max_value {max_value}")
+        raise ValueError(f"{param_name}: {value} > max_value {max_value}")
 
     return value
