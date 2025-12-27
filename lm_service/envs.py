@@ -72,9 +72,6 @@ environment_variables: dict[str, Callable[[], Any]] = {
         os.getenv("LM_SERVICE_STARTUP_WAIT_TIME", "120")
     ),
     # Timeout in seconds for requests.
-    "LM_SERVICE_REQUEST_TIMEOUT_SECONDS": lambda: int(
-        os.getenv("LM_SERVICE_REQUEST_TIMEOUT_SECONDS", 120)
-    ),
     "LM_SERVICE_REQUEST_TIMEOUT_SECONDS": lambda: check_parameter_range(
         "LM_SERVICE_REQUEST_TIMEOUT_SECONDS", 120, min_value=0
     ),
